@@ -292,7 +292,12 @@ export default function InboxPage() {
                         End
                       </Button>
                     </>
-                  ) : selectedInbox.status !== 'resolved' && selectedInbox.status !== 'escalated' ? (
+                  ) : selectedInbox.status === 'escalated' ? (
+                    <Button variant="default" size="sm" onClick={handleEndConversation}>
+                      <Square className="h-4 w-4 mr-1" />
+                      Resolve
+                    </Button>
+                  ) : selectedInbox.status !== 'resolved' ? (
                     <Button variant="default" size="sm" onClick={handleStartConversation}>
                       <Play className="h-4 w-4 mr-1" />
                       Start
@@ -344,7 +349,7 @@ export default function InboxPage() {
               </ScrollArea>
 
               {/* Message Input */}
-              {(selectedInbox.status === 'started' || selectedInbox.status === 'pending') && (
+              {(selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated') && (
                 <div className="p-4 border-t border-border bg-card">
                   <div className="flex gap-2 max-w-3xl mx-auto">
                     <Input
