@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Inbox, Users, MessageSquare, Settings, HelpCircle, Headphones } from 'lucide-react';
+import { LayoutDashboard, Inbox, Users, MessageSquare, Settings, HelpCircle } from 'lucide-react';
 const navItems = [{
   path: '/',
   icon: LayoutDashboard,
@@ -29,12 +29,10 @@ export function Sidebar() {
       <div className="flex h-full flex-col">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-            <Headphones className="h-5 w-5 text-sidebar-primary-foreground" />
-          </div>
+          
           <div>
-            <h1 className="text-lg font-semibold text-[#ad4e13]">Onference</h1>
-            <p className="text-xs text-sidebar-muted">Customer Support</p>
+            <h1 className="text-lg font-semibold text-[#ad4e13] items-center justify-center text-center ">Onference</h1>
+            
           </div>
         </div>
 
