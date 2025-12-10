@@ -16,8 +16,24 @@ export default function Dashboard() {
     setDateRange
   } = useGlobalStore();
   const stats = getDashboardStats();
-  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
-  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+
+  const handleStartDateSelect = (date: Date | undefined) => {
+    setStartDate(date);
+    // If end date is before new start date, reset end date
+    if (date && endDate && date > endDate) {
+      setEndDate(undefined);
+    }
+  };
+
+  const handleEndDateSelect = (date: Date | undefined) => {
+    // Only allow end date if it's after start date
+    if (date && startDate && date < startDate) {
+      return;
+    }
+    setEndDate(date);
+  };
 
   const statCards = [{
     label: 'Read',
@@ -60,25 +76,38 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className={cn('w-[160px] justify-start text-left font-normal')}>
+                <Button variant="outline" className={cn('w-[160px] justify-start text-left font-normal', !startDate && 'text-muted-foreground')}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {startDate ? format(startDate, 'MMM dd, yyyy') : <span>Start Date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 bg-popover" align="end">
-                <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus className="pointer-events-auto" />
+                <Calendar 
+                  mode="single" 
+                  selected={startDate} 
+                  onSelect={handleStartDateSelect} 
+                  initialFocus 
+                  className="pointer-events-auto" 
+                />
               </PopoverContent>
             </Popover>
             <span className="text-muted-foreground">to</span>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className={cn('w-[160px] justify-start text-left font-normal')}>
+                <Button variant="outline" className={cn('w-[160px] justify-start text-left font-normal', !endDate && 'text-muted-foreground')}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {endDate ? format(endDate, 'MMM dd, yyyy') : <span>End Date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 bg-popover" align="end">
-                <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus className="pointer-events-auto" />
+                <Calendar 
+                  mode="single" 
+                  selected={endDate} 
+                  onSelect={handleEndDateSelect}
+                  disabled={(date) => startDate ? date < startDate : false}
+                  initialFocus 
+                  className="pointer-events-auto" 
+                />
               </PopoverContent>
             </Popover>
           </div>

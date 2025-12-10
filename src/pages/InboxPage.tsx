@@ -61,16 +61,20 @@ export default function InboxPage() {
   } = useGlobalStore();
 
   const [showContextPanel, setShowContextPanel] = useState(false);
-  const [messageInput, setMessageInput] = useState('');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showQueryModal, setShowQueryModal] = useState(false);
   const [showReplyModal, setShowReplyModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [showWhatsappModal, setShowWhatsappModal] = useState(false);
   const [replyMessage, setReplyMessage] = useState<Message | null>(null);
   const [replyBody, setReplyBody] = useState('');
   const [noteBody, setNoteBody] = useState('');
   const [noteDueDate, setNoteDueDate] = useState('');
   const [selectedQueryType, setSelectedQueryType] = useState('');
   const [customQueryType, setCustomQueryType] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [whatsappMessage, setWhatsappMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Filter and sort inboxes
@@ -149,24 +153,70 @@ export default function InboxPage() {
     }
   };
 
-  const handleSendMessage = () => {
-    if (selectedInbox && messageInput.trim()) {
+  const handleSendEmail = async () => {
+    if (selectedInbox && emailSubject.trim() && emailBody.trim()) {
+      toast({
+        title: 'Sending Email...',
+        description: 'Calling Outlook Email API',
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       const newMessage: Message = {
         id: `msg-${Date.now()}`,
         from: 'Support',
         to: selectedInbox.user.name,
-        body: messageInput,
-        source: selectedInbox.source,
+        subject: emailSubject,
+        body: emailBody,
+        source: 'email',
         type: 'body',
         messageId: `MSG-${Date.now()}`,
         created_at: new Date().toISOString(),
         inbox_id: selectedInbox.id,
       };
       addMessage(newMessage);
-      setMessageInput('');
+      
       toast({
-        title: 'Message Sent',
+        title: 'Email Sent',
+        description: `Email sent to ${selectedInbox.user.email}`,
       });
+      
+      setShowEmailModal(false);
+      setEmailSubject('');
+      setEmailBody('');
+    }
+  };
+
+  const handleSendWhatsapp = async () => {
+    if (selectedInbox && whatsappMessage.trim()) {
+      toast({
+        title: 'Sending WhatsApp Template...',
+        description: 'Calling WhatsApp API',
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        from: 'Support',
+        to: selectedInbox.user.name,
+        body: whatsappMessage,
+        source: 'whatsapp',
+        type: 'template',
+        template: whatsappMessage,
+        messageId: `MSG-${Date.now()}`,
+        created_at: new Date().toISOString(),
+        inbox_id: selectedInbox.id,
+      };
+      addMessage(newMessage);
+      
+      toast({
+        title: 'WhatsApp Template Sent',
+        description: `Template sent to ${selectedInbox.user.mobile}`,
+      });
+      
+      setShowWhatsappModal(false);
+      setWhatsappMessage('');
     }
   };
 
@@ -419,19 +469,25 @@ export default function InboxPage() {
                 </div>
               </ScrollArea>
 
-              {/* Message Input */}
+              {/* Send Email / WhatsApp Buttons */}
               {(selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated') && (
                 <div className="p-4 border-t border-border bg-card">
                   <div className="flex gap-2 max-w-3xl mx-auto">
-                    <Input
-                      placeholder="Type your message..."
-                      value={messageInput}
-                      onChange={(e) => setMessageInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    <Button 
+                      variant="outline" 
                       className="flex-1"
-                    />
-                    <Button onClick={handleSendMessage}>
-                      <Send className="h-4 w-4" />
+                      onClick={() => setShowEmailModal(true)}
+                    >
+                      <Mail className="h-4 w-4 mr-2 text-email" />
+                      Send Email
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => setShowWhatsappModal(true)}
+                    >
+                      <MessageCircle className="h-4 w-4 mr-2 text-whatsapp" />
+                      Send WhatsApp Template
                     </Button>
                   </div>
                 </div>
@@ -573,6 +629,81 @@ export default function InboxPage() {
               Cancel
             </Button>
             <Button onClick={handleResolve}>Resolve</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Email Modal */}
+      <Dialog open={showEmailModal} onOpenChange={setShowEmailModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-email" />
+              Send Email
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Subject</label>
+              <Input
+                placeholder="Email subject..."
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Message</label>
+              <Textarea
+                placeholder="Type your email message..."
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                className="mt-1"
+                rows={5}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendEmail}>
+              <Send className="h-4 w-4 mr-2" />
+              Send Email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send WhatsApp Template Modal */}
+      <Dialog open={showWhatsappModal} onOpenChange={setShowWhatsappModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-whatsapp" />
+              Send WhatsApp Template
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Message</label>
+              <Textarea
+                placeholder="Type your WhatsApp message..."
+                value={whatsappMessage}
+                onChange={(e) => setWhatsappMessage(e.target.value)}
+                className="mt-1"
+                rows={5}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWhatsappModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendWhatsapp}>
+              <Send className="h-4 w-4 mr-2" />
+              Send WhatsApp
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
