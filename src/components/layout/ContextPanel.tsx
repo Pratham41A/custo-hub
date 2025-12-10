@@ -1,6 +1,6 @@
 import { useGlobalStore } from '@/store/globalStore';
 import { Inbox } from '@/types';
-import { X, Mail, MessageCircle, StickyNote, Phone, MapPin, Calendar, Monitor, Tag } from 'lucide-react';
+import { X, Mail, StickyNote, Phone, MapPin, Calendar, Monitor, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -15,7 +15,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { toast } from '@/hooks/use-toast';
 
 interface ContextPanelProps {
   inbox?: Inbox | null;
@@ -33,34 +32,6 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
   const userPayments = payments.filter((p) => p.user.id === inbox.user.id);
   const userViews = views.filter((v) => v.user_id === inbox.user.id);
   const userNotes = activities.filter((a) => a.user.id === inbox.user.id);
-
-  const handleSendEmail = async () => {
-    // Mock API call for sending email
-    toast({
-      title: 'Sending Email...',
-      description: 'Calling Outlook Email API',
-    });
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast({
-      title: 'Email Sent',
-      description: `Email sent to ${inbox.user.email}`,
-    });
-  };
-
-  const handleSendWhatsappTemplate = async () => {
-    // Mock API call for sending WhatsApp template
-    toast({
-      title: 'Sending WhatsApp Template...',
-      description: 'Calling WhatsApp API',
-    });
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast({
-      title: 'WhatsApp Template Sent',
-      description: `Template sent to ${inbox.user.mobile}`,
-    });
-  };
 
   return (
     <>
@@ -187,25 +158,6 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
             </div>
           </ScrollArea>
 
-          {/* Bottom Action Buttons */}
-          <div className="border-t border-border p-4 space-y-2">
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={handleSendEmail}
-            >
-              <Mail className="h-4 w-4 mr-2 text-email" />
-              Send Email
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={handleSendWhatsappTemplate}
-            >
-              <MessageCircle className="h-4 w-4 mr-2 text-whatsapp" />
-              Send WhatsApp Template
-            </Button>
-          </div>
         </div>
       </aside>
 
