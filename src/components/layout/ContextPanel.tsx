@@ -1,10 +1,9 @@
 import { useGlobalStore } from '@/store/globalStore';
-import { User, Inbox } from '@/types';
-import { X, Mail, Phone, MapPin, Calendar, Monitor, Tag } from 'lucide-react';
+import { Inbox } from '@/types';
+import { X, Mail, MessageCircle, StickyNote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useState } from 'react';
 import {
@@ -16,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from '@/hooks/use-toast';
 
 interface ContextPanelProps {
   inbox?: Inbox | null;
@@ -23,20 +23,47 @@ interface ContextPanelProps {
 }
 
 export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
-  const { users, subscriptions, payments, views, activities } = useGlobalStore();
-  const [activeModal, setActiveModal] = useState<'subscription' | 'payment' | 'view' | 'activity' | null>(null);
+  const { subscriptions, payments, views, activities } = useGlobalStore();
+  const [activeModal, setActiveModal] = useState<'subscription' | 'payment' | 'view' | 'notes' | null>(null);
 
   if (!inbox) return null;
 
-  const user = users.find((u) => u.id === inbox.user.id);
   const userSubscriptions = subscriptions.filter((s) => s.user.id === inbox.user.id);
   const userPayments = payments.filter((p) => p.user.id === inbox.user.id);
   const userViews = views.filter((v) => v.user_id === inbox.user.id);
-  const userActivities = activities.filter((a) => a.user.id === inbox.user.id);
+  const userNotes = activities.filter((a) => a.user.id === inbox.user.id);
+
+  const handleSendEmail = async () => {
+    // Mock API call for sending email
+    toast({
+      title: 'Sending Email...',
+      description: 'Calling Outlook Email API',
+    });
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    toast({
+      title: 'Email Sent',
+      description: `Email sent to ${inbox.user.email}`,
+    });
+  };
+
+  const handleSendWhatsappTemplate = async () => {
+    // Mock API call for sending WhatsApp template
+    toast({
+      title: 'Sending WhatsApp Template...',
+      description: 'Calling WhatsApp API',
+    });
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    toast({
+      title: 'WhatsApp Template Sent',
+      description: `Template sent to ${inbox.user.mobile}`,
+    });
+  };
 
   return (
     <>
-      <aside className="fixed right-0 top-0 z-30 h-screen w-80 border-l border-border bg-card animate-slide-in-right">
+      <aside className="fixed right-0 top-0 z-30 h-screen w-80 border-l border-border bg-card animate-slide-in-right flex flex-col">
         <div className="flex h-full flex-col">
           {/* Header */}
           <div className="flex h-16 items-center justify-between border-b border-border px-4">
@@ -48,71 +75,6 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
 
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
-              {/* User Info */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <span className="text-lg font-semibold text-primary">
-                      {inbox.user.name.split(' ').map((n) => n[0]).join('')}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">{inbox.user.name}</h3>
-                    <p className="text-sm text-muted-foreground">Customer</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{inbox.user.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{inbox.user.mobile}</span>
-                  </div>
-                  {user?.location && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span>{user.location}</span>
-                    </div>
-                  )}
-                  {user?.speciality && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Tag className="h-4 w-4 text-muted-foreground" />
-                      <span>{user.speciality}</span>
-                    </div>
-                  )}
-                  {user?.device && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Monitor className="h-4 w-4 text-muted-foreground" />
-                      <span>{user.device}</span>
-                    </div>
-                  )}
-                  {user?.registration_date && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>Joined {new Date(user.registration_date).toLocaleDateString()}</span>
-                    </div>
-                  )}
-                </div>
-
-                {user?.topic_filters && user.topic_filters.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase">Topics</p>
-                    <div className="flex flex-wrap gap-1">
-                      {user.topic_filters.map((topic) => (
-                        <Badge key={topic} variant="secondary" className="text-xs">
-                          {topic}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
               {/* Quick Actions */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase">Customer Data</p>
@@ -147,37 +109,37 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setActiveModal('activity')}
+                    onClick={() => setActiveModal('notes')}
                     className="justify-start"
                   >
-                    Activities
-                    <Badge variant="secondary" className="ml-auto">{userActivities.length}</Badge>
+                    <StickyNote className="h-4 w-4 mr-1" />
+                    Notes
+                    <Badge variant="secondary" className="ml-auto">{userNotes.length}</Badge>
                   </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Conversation Stats */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase">Conversation Stats</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-muted p-3">
-                    <p className="text-2xl font-bold text-whatsapp">{inbox.whatsapp_count}</p>
-                    <p className="text-xs text-muted-foreground">WhatsApp</p>
-                  </div>
-                  <div className="rounded-lg bg-muted p-3">
-                    <p className="text-2xl font-bold text-email">{inbox.email_count}</p>
-                    <p className="text-xs text-muted-foreground">Email</p>
-                  </div>
-                  <div className="col-span-2 rounded-lg bg-muted p-3">
-                    <p className="text-2xl font-bold text-success">{inbox.resolved_count}</p>
-                    <p className="text-xs text-muted-foreground">Resolved Tickets</p>
-                  </div>
                 </div>
               </div>
             </div>
           </ScrollArea>
+
+          {/* Bottom Action Buttons */}
+          <div className="border-t border-border p-4 space-y-2">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={handleSendEmail}
+            >
+              <Mail className="h-4 w-4 mr-2 text-email" />
+              Send Email
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={handleSendWhatsappTemplate}
+            >
+              <MessageCircle className="h-4 w-4 mr-2 text-whatsapp" />
+              Send WhatsApp Template
+            </Button>
+          </div>
         </div>
       </aside>
 
@@ -313,33 +275,33 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Activities Modal */}
-      <Dialog open={activeModal === 'activity'} onOpenChange={() => setActiveModal(null)}>
+      {/* Notes Modal */}
+      <Dialog open={activeModal === 'notes'} onOpenChange={() => setActiveModal(null)}>
         <DialogContent className="max-w-2xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>Activities - {inbox.user.name}</DialogTitle>
+            <DialogTitle>Notes - {inbox.user.name}</DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Activity</TableHead>
+                  <TableHead>Note</TableHead>
                   <TableHead>Due Date</TableHead>
                   <TableHead>Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {userActivities.map((activity) => (
-                  <TableRow key={activity.id}>
-                    <TableCell className="font-medium">{activity.body}</TableCell>
-                    <TableCell>{new Date(activity.due_date).toLocaleDateString()}</TableCell>
-                    <TableCell>{new Date(activity.created_at).toLocaleDateString()}</TableCell>
+                {userNotes.map((note) => (
+                  <TableRow key={note.id}>
+                    <TableCell className="font-medium">{note.body}</TableCell>
+                    <TableCell>{new Date(note.due_date).toLocaleDateString()}</TableCell>
+                    <TableCell>{new Date(note.created_at).toLocaleDateString()}</TableCell>
                   </TableRow>
                 ))}
-                {userActivities.length === 0 && (
+                {userNotes.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      No activities found
+                      No notes found
                     </TableCell>
                   </TableRow>
                 )}

@@ -30,8 +30,8 @@ import {
   Play,
   Square,
   AlertTriangle,
-  Plus,
-  Calendar,
+  StickyNote,
+  Reply,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
@@ -62,10 +62,13 @@ export default function InboxPage() {
 
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [messageInput, setMessageInput] = useState('');
-  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
   const [showQueryModal, setShowQueryModal] = useState(false);
-  const [activityBody, setActivityBody] = useState('');
-  const [activityDueDate, setActivityDueDate] = useState('');
+  const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replyMessage, setReplyMessage] = useState<Message | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [noteBody, setNoteBody] = useState('');
+  const [noteDueDate, setNoteDueDate] = useState('');
   const [selectedQueryType, setSelectedQueryType] = useState('');
   const [customQueryType, setCustomQueryType] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -167,22 +170,78 @@ export default function InboxPage() {
     }
   };
 
-  const handleCreateActivity = () => {
-    if (selectedInbox && activityBody && activityDueDate) {
+  const handleCreateNote = async () => {
+    if (selectedInbox && noteBody && noteDueDate) {
+      // Mock API call
+      toast({
+        title: 'Creating Note...',
+        description: 'Saving to database',
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       addActivity({
-        id: `act-${Date.now()}`,
+        id: `note-${Date.now()}`,
         user: selectedInbox.user,
-        body: activityBody,
-        due_date: activityDueDate,
+        body: noteBody,
+        due_date: noteDueDate,
         created_at: new Date().toISOString(),
       });
-      setShowActivityModal(false);
-      setActivityBody('');
-      setActivityDueDate('');
+      setShowNotesModal(false);
+      setNoteBody('');
+      setNoteDueDate('');
       toast({
-        title: 'Activity Created',
-        description: 'New activity has been added',
+        title: 'Note Created',
+        description: 'New note has been added',
       });
+    }
+  };
+
+  const handleReplyClick = (message: Message) => {
+    setReplyMessage(message);
+    setReplyBody('');
+    setShowReplyModal(true);
+  };
+
+  const handleSendReply = async () => {
+    if (selectedInbox && replyMessage && replyBody.trim()) {
+      // Mock API call based on source
+      if (replyMessage.source === 'whatsapp') {
+        toast({
+          title: 'Sending WhatsApp Message...',
+          description: 'Calling WhatsApp API',
+        });
+      } else {
+        toast({
+          title: 'Sending Email...',
+          description: 'Calling Outlook Email API',
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        from: 'Support',
+        to: selectedInbox.user.name,
+        body: replyBody,
+        source: replyMessage.source,
+        type: 'body',
+        messageId: `MSG-${Date.now()}`,
+        created_at: new Date().toISOString(),
+        inbox_id: selectedInbox.id,
+        inReplyTo: replyMessage.messageId,
+      };
+      addMessage(newMessage);
+      
+      toast({
+        title: replyMessage.source === 'whatsapp' ? 'WhatsApp Message Sent' : 'Email Sent',
+        description: `Reply sent to ${selectedInbox.user.name}`,
+      });
+      
+      setShowReplyModal(false);
+      setReplyMessage(null);
+      setReplyBody('');
     }
   };
 
@@ -197,6 +256,8 @@ export default function InboxPage() {
     };
     return <Badge variant="outline" className={cn('capitalize', variants[status])}>{status}</Badge>;
   };
+
+  const canShowActions = selectedInbox && selectedInbox.status !== 'resolved';
 
   return (
     <MainLayout>
@@ -263,7 +324,7 @@ export default function InboxPage() {
         <div className="flex-1 flex flex-col bg-background">
           {selectedInbox ? (
             <>
-              {/* Thread Header */}
+              {/* Thread Header with Top Action Buttons */}
               <div className="h-16 border-b border-border px-6 flex items-center justify-between bg-card">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
@@ -276,34 +337,33 @@ export default function InboxPage() {
                     <p className="text-sm text-muted-foreground">{selectedInbox.user.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setShowActivityModal(true)}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Activity
-                  </Button>
-                  {selectedInbox.status === 'started' || selectedInbox.status === 'pending' ? (
-                    <>
+                {canShowActions && (
+                  <div className="flex items-center gap-2">
+                    {selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated' ? (
+                      <>
+                        <Button variant="default" size="sm" onClick={handleEndConversation}>
+                          <Square className="h-4 w-4 mr-1" />
+                          End Conversation
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="default" size="sm" onClick={handleStartConversation}>
+                        <Play className="h-4 w-4 mr-1" />
+                        Start Conversation
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => setShowNotesModal(true)}>
+                      <StickyNote className="h-4 w-4 mr-1" />
+                      Create Note
+                    </Button>
+                    {selectedInbox.status !== 'escalated' && (
                       <Button variant="outline" size="sm" onClick={handleEscalate}>
                         <AlertTriangle className="h-4 w-4 mr-1" />
                         Escalate
                       </Button>
-                      <Button variant="default" size="sm" onClick={handleEndConversation}>
-                        <Square className="h-4 w-4 mr-1" />
-                        End
-                      </Button>
-                    </>
-                  ) : selectedInbox.status === 'escalated' ? (
-                    <Button variant="default" size="sm" onClick={handleEndConversation}>
-                      <Square className="h-4 w-4 mr-1" />
-                      Resolve
-                    </Button>
-                  ) : selectedInbox.status !== 'resolved' ? (
-                    <Button variant="default" size="sm" onClick={handleStartConversation}>
-                      <Play className="h-4 w-4 mr-1" />
-                      Start
-                    </Button>
-                  ) : null}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Messages */}
@@ -318,7 +378,7 @@ export default function InboxPage() {
                       >
                         <div
                           className={cn(
-                            'message-bubble',
+                            'message-bubble relative group',
                             isOutgoing ? 'message-bubble-outgoing' : 'message-bubble-incoming'
                           )}
                         >
@@ -340,6 +400,17 @@ export default function InboxPage() {
                               {format(new Date(message.created_at), 'h:mm a')}
                             </span>
                           </div>
+                          {/* Reply Button - only for incoming messages */}
+                          {!isOutgoing && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="absolute -right-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                              onClick={() => handleReplyClick(message)}
+                            >
+                              <Reply className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
@@ -382,19 +453,19 @@ export default function InboxPage() {
         <ContextPanel inbox={selectedInbox} onClose={() => setShowContextPanel(false)} />
       )}
 
-      {/* Activity Modal */}
-      <Dialog open={showActivityModal} onOpenChange={setShowActivityModal}>
+      {/* Notes Modal */}
+      <Dialog open={showNotesModal} onOpenChange={setShowNotesModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Activity</DialogTitle>
+            <DialogTitle>Create Note</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Description</label>
               <Textarea
-                placeholder="Activity description..."
-                value={activityBody}
-                onChange={(e) => setActivityBody(e.target.value)}
+                placeholder="Note description..."
+                value={noteBody}
+                onChange={(e) => setNoteBody(e.target.value)}
                 className="mt-1"
               />
             </div>
@@ -402,17 +473,65 @@ export default function InboxPage() {
               <label className="text-sm font-medium">Due Date</label>
               <Input
                 type="date"
-                value={activityDueDate}
-                onChange={(e) => setActivityDueDate(e.target.value)}
+                value={noteDueDate}
+                onChange={(e) => setNoteDueDate(e.target.value)}
                 className="mt-1"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowActivityModal(false)}>
+            <Button variant="outline" onClick={() => setShowNotesModal(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateActivity}>Create</Button>
+            <Button onClick={handleCreateNote}>Create Note</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reply Modal */}
+      <Dialog open={showReplyModal} onOpenChange={setShowReplyModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Reply via {replyMessage?.source === 'whatsapp' ? (
+                <>
+                  <MessageCircle className="h-5 w-5 text-whatsapp" />
+                  WhatsApp
+                </>
+              ) : (
+                <>
+                  <Mail className="h-5 w-5 text-email" />
+                  Email
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {replyMessage && (
+              <div className="p-3 rounded-lg bg-muted text-sm">
+                <p className="text-muted-foreground mb-1">Replying to:</p>
+                <p>{replyMessage.body}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium">Your Reply</label>
+              <Textarea
+                placeholder="Type your reply..."
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+                className="mt-1"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReplyModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendReply}>
+              <Send className="h-4 w-4 mr-2" />
+              Send {replyMessage?.source === 'whatsapp' ? 'WhatsApp' : 'Email'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
