@@ -1,6 +1,6 @@
 import { useGlobalStore } from '@/store/globalStore';
 import { Inbox } from '@/types';
-import { X, Mail, MessageCircle, StickyNote } from 'lucide-react';
+import { X, Mail, MessageCircle, StickyNote, Phone, MapPin, Calendar, Monitor, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -23,11 +23,12 @@ interface ContextPanelProps {
 }
 
 export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
-  const { subscriptions, payments, views, activities } = useGlobalStore();
+  const { users, subscriptions, payments, views, activities } = useGlobalStore();
   const [activeModal, setActiveModal] = useState<'subscription' | 'payment' | 'view' | 'notes' | null>(null);
 
   if (!inbox) return null;
 
+  const user = users.find((u) => u.id === inbox.user.id);
   const userSubscriptions = subscriptions.filter((s) => s.user.id === inbox.user.id);
   const userPayments = payments.filter((p) => p.user.id === inbox.user.id);
   const userViews = views.filter((v) => v.user_id === inbox.user.id);
@@ -75,6 +76,71 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
 
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
+              {/* User Info */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                    <span className="text-lg font-semibold text-primary">
+                      {inbox.user.name.split(' ').map((n) => n[0]).join('')}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">{inbox.user.name}</h3>
+                    <p className="text-sm text-muted-foreground">Customer</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <span>{inbox.user.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span>{inbox.user.mobile}</span>
+                  </div>
+                  {user?.location && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>{user.location}</span>
+                    </div>
+                  )}
+                  {user?.speciality && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Tag className="h-4 w-4 text-muted-foreground" />
+                      <span>{user.speciality}</span>
+                    </div>
+                  )}
+                  {user?.device && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Monitor className="h-4 w-4 text-muted-foreground" />
+                      <span>{user.device}</span>
+                    </div>
+                  )}
+                  {user?.registration_date && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span>Joined {new Date(user.registration_date).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                {user?.topic_filters && user.topic_filters.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase">Topics</p>
+                    <div className="flex flex-wrap gap-1">
+                      {user.topic_filters.map((topic) => (
+                        <Badge key={topic} variant="secondary" className="text-xs">
+                          {topic}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
               {/* Quick Actions */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase">Customer Data</p>
