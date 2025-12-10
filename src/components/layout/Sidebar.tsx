@@ -9,10 +9,6 @@ const navItems = [{
   path: '/inbox',
   icon: Inbox,
   label: 'Inbox'
-}, {
-  path: '/users',
-  icon: Users,
-  label: 'Users'
 }];
 const bottomNavItems = [{
   path: '/settings',
