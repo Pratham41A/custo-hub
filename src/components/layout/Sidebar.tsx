@@ -29,18 +29,11 @@ export function Sidebar() {
       <div className="flex h-full flex-col">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          
-          <div>
-            <h1 className="text-lg font-semibold text-[#ad4e13] items-center justify-center text-center ">Onference</h1>
-            
-          </div>
+          <img src="/images/onfnewlogo.png" alt="Onference Logo" className="h-8 w-auto" />
         </div>
 
         {/* Main Navigation */}
         <nav className="flex-1 space-y-1 px-3 py-4">
-          <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
-            Main Menu
-          </p>
           {navItems.map(item => {
           const isActive = location.pathname === item.path;
           return <NavLink key={item.path} to={item.path} className={cn('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200', isActive ? 'bg-sidebar-accent text-sidebar-primary' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground')}>
