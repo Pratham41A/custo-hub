@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { User, Subscription, Payment, Inbox, Message, View, Activity, QueryType, DashboardStats } from '@/types';
-import { mockUsers, mockSubscriptions, mockPayments, mockInboxes, mockMessages, mockViews, mockActivities, mockQueryTypes } from '@/data/mockData';
+import { User, Subscription, Payment, Inbox, Message, View, Note, QueryType, DashboardStats } from '@/types';
+import { mockUsers, mockSubscriptions, mockPayments, mockInboxes, mockMessages, mockViews, mockNotes, mockQueryTypes } from '@/data/mockData';
 
 interface GlobalState {
   // Data
@@ -10,7 +10,7 @@ interface GlobalState {
   inboxes: Inbox[];
   messages: Message[];
   views: View[];
-  activities: Activity[];
+  notes: Note[];
   queryTypes: QueryType[];
   
   // UI State
@@ -26,7 +26,7 @@ interface GlobalState {
   setInboxes: (inboxes: Inbox[]) => void;
   setMessages: (messages: Message[]) => void;
   setViews: (views: View[]) => void;
-  setActivities: (activities: Activity[]) => void;
+  setNotes: (notes: Note[]) => void;
   setQueryTypes: (queryTypes: QueryType[]) => void;
   
   setSelectedInbox: (inbox: Inbox | null) => void;
@@ -41,8 +41,11 @@ interface GlobalState {
   // Message Operations
   addMessage: (message: Message) => void;
   
-  // Activity Operations
-  addActivity: (activity: Activity) => void;
+  // Note Operations
+  addNote: (note: Note) => void;
+  
+  // Inbox Source Update
+  updateInboxSource: (inboxId: string, source: 'whatsapp' | 'email') => void;
   
   // Query Type Operations
   addQueryType: (queryType: QueryType) => void;
@@ -64,7 +67,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
   inboxes: mockInboxes,
   messages: mockMessages,
   views: mockViews,
-  activities: mockActivities,
+  notes: mockNotes,
   queryTypes: mockQueryTypes,
   
   // UI State
@@ -80,7 +83,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
   setInboxes: (inboxes) => set({ inboxes }),
   setMessages: (messages) => set({ messages }),
   setViews: (views) => set({ views }),
-  setActivities: (activities) => set({ activities }),
+  setNotes: (notes) => set({ notes }),
   setQueryTypes: (queryTypes) => set({ queryTypes }),
   
   setSelectedInbox: (inbox) => set({ selectedInbox: inbox }),
@@ -107,9 +110,21 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     messages: [...state.messages, message],
   })),
   
-  // Activity Operations
-  addActivity: (activity) => set((state) => ({
-    activities: [...state.activities, activity],
+  // Note Operations
+  addNote: (note) => set((state) => ({
+    notes: [...state.notes, note],
+  })),
+  
+  // Inbox Source Update
+  updateInboxSource: (inboxId, source) => set((state) => ({
+    inboxes: state.inboxes.map((inbox) =>
+      inbox.id === inboxId && !inbox.isInitiated 
+        ? { ...inbox, source, isInitiated: true, updated_at: new Date().toISOString() } 
+        : inbox
+    ),
+    selectedInbox: state.selectedInbox?.id === inboxId && !state.selectedInbox.isInitiated
+      ? { ...state.selectedInbox, source, isInitiated: true, updated_at: new Date().toISOString() }
+      : state.selectedInbox,
   })),
   
   // Query Type Operations

@@ -53,8 +53,9 @@ export default function InboxPage() {
     selectedInbox,
     setSelectedInbox,
     updateInboxStatus,
+    updateInboxSource,
     addMessage,
-    addActivity,
+    addNote,
     queryTypes,
     addQueryType,
     activeFilter,
@@ -69,6 +70,7 @@ export default function InboxPage() {
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
   const [replyMessage, setReplyMessage] = useState<Message | null>(null);
   const [replyBody, setReplyBody] = useState('');
+  const [replyTemplateName, setReplyTemplateName] = useState('');
   const [noteBody, setNoteBody] = useState('');
   const [noteDueDate, setNoteDueDate] = useState('');
   const [selectedQueryType, setSelectedQueryType] = useState('');
@@ -231,7 +233,7 @@ export default function InboxPage() {
       
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      addActivity({
+      addNote({
         id: `note-${Date.now()}`,
         user: selectedInbox.user,
         body: noteBody,
@@ -251,13 +253,60 @@ export default function InboxPage() {
   const handleReplyClick = (message: Message) => {
     setReplyMessage(message);
     setReplyBody('');
+    setReplyTemplateName('');
     setShowReplyModal(true);
   };
 
+  // Check if WhatsApp 24-hour window is active
+  const isWithin24HourWindow = (inbox: Inbox | null): boolean => {
+    if (!inbox || !inbox.whatsapp24HourWindowStartDateTime) return false;
+    const windowStart = new Date(inbox.whatsapp24HourWindowStartDateTime);
+    const now = new Date();
+    const hoursDiff = (now.getTime() - windowStart.getTime()) / (1000 * 60 * 60);
+    return hoursDiff < 24;
+  };
+
   const handleSendReply = async () => {
-    if (selectedInbox && replyMessage && replyBody.trim()) {
-      // Mock API call based on source
-      if (replyMessage.source === 'whatsapp') {
+    if (!selectedInbox || !replyMessage) return;
+
+    const isWhatsApp = replyMessage.source === 'whatsapp';
+    const within24Hours = isWithin24HourWindow(selectedInbox);
+
+    // For WhatsApp outside 24-hour window, require template name
+    if (isWhatsApp && !within24Hours) {
+      if (!replyTemplateName.trim()) return;
+      
+      toast({
+        title: 'Sending WhatsApp Template...',
+        description: 'Calling WhatsApp API',
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        from: 'Support',
+        to: selectedInbox.user.name,
+        body: `Template: ${replyTemplateName}`,
+        source: 'whatsapp',
+        type: 'template',
+        template: replyTemplateName,
+        messageId: `MSG-${Date.now()}`,
+        created_at: new Date().toISOString(),
+        inbox_id: selectedInbox.id,
+        inReplyTo: replyMessage.messageId,
+      };
+      addMessage(newMessage);
+
+      toast({
+        title: 'WhatsApp Template Sent',
+        description: `Template reply sent to ${selectedInbox.user.name}`,
+      });
+    } else {
+      // For email or WhatsApp within 24-hour window, require body
+      if (!replyBody.trim()) return;
+
+      if (isWhatsApp) {
         toast({
           title: 'Sending WhatsApp Message...',
           description: 'Calling WhatsApp API',
@@ -286,14 +335,15 @@ export default function InboxPage() {
       addMessage(newMessage);
       
       toast({
-        title: replyMessage.source === 'whatsapp' ? 'WhatsApp Message Sent' : 'Email Sent',
+        title: isWhatsApp ? 'WhatsApp Message Sent' : 'Email Sent',
         description: `Reply sent to ${selectedInbox.user.name}`,
       });
-      
-      setShowReplyModal(false);
-      setReplyMessage(null);
-      setReplyBody('');
     }
+    
+    setShowReplyModal(false);
+    setReplyMessage(null);
+    setReplyBody('');
+    setReplyTemplateName('');
   };
 
   const getStatusBadge = (status: InboxStatus) => {
@@ -469,13 +519,15 @@ export default function InboxPage() {
                               {format(new Date(message.created_at), 'h:mm a')}
                             </span>
                           </div>
-                          {/* Reply Button - only for incoming messages */}
+                          {/* Reply Button - only for incoming messages, disabled if conversation not started */}
                           {!isOutgoing && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="absolute -right-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
                               onClick={() => handleReplyClick(message)}
+                              disabled={!isConversationStarted}
+                              title={!isConversationStarted ? 'Start conversation to reply' : 'Reply'}
                             >
                               <Reply className="h-4 w-4" />
                             </Button>
@@ -488,29 +540,27 @@ export default function InboxPage() {
                 </div>
               </ScrollArea>
 
-              {/* Send Email / WhatsApp Buttons */}
-              {(selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated') && (
-                <div className="p-4 border-t border-border bg-card">
-                  <div className="flex gap-2 max-w-3xl mx-auto">
-                    <Button 
-                      variant="outline" 
-                      className="flex-1"
-                      onClick={() => setShowEmailModal(true)}
-                    >
-                      <Mail className="h-4 w-4 mr-2 text-email" />
-                      Send Email
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="flex-1"
-                      onClick={() => setShowWhatsappModal(true)}
-                    >
-                      <MessageCircle className="h-4 w-4 mr-2 text-whatsapp" />
-                      Send WhatsApp Template
-                    </Button>
-                  </div>
+              {/* Send Email / WhatsApp Buttons - Static */}
+              <div className="p-4 border-t border-border bg-card">
+                <div className="flex gap-2 max-w-3xl mx-auto">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setShowEmailModal(true)}
+                  >
+                    <Mail className="h-4 w-4 mr-2 text-email" />
+                    Send Email
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setShowWhatsappModal(true)}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2 text-whatsapp" />
+                    Send WhatsApp Template
+                  </Button>
                 </div>
-              )}
+              </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -572,6 +622,9 @@ export default function InboxPage() {
                 <>
                   <MessageCircle className="h-5 w-5 text-whatsapp" />
                   WhatsApp
+                  {!isWithin24HourWindow(selectedInbox) && (
+                    <span className="text-xs text-muted-foreground ml-2">(Template required - outside 24h window)</span>
+                  )}
                 </>
               ) : (
                 <>
@@ -588,16 +641,28 @@ export default function InboxPage() {
                 <p>{replyMessage.body}</p>
               </div>
             )}
-            <div>
-              <label className="text-sm font-medium">Your Reply</label>
-              <Textarea
-                placeholder="Type your reply..."
-                value={replyBody}
-                onChange={(e) => setReplyBody(e.target.value)}
-                className="mt-1"
-                rows={4}
-              />
-            </div>
+            {replyMessage?.source === 'whatsapp' && !isWithin24HourWindow(selectedInbox) ? (
+              <div>
+                <label className="text-sm font-medium">Template Name</label>
+                <Input
+                  placeholder="Enter template name..."
+                  value={replyTemplateName}
+                  onChange={(e) => setReplyTemplateName(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="text-sm font-medium">Your Reply</label>
+                <Textarea
+                  placeholder="Type your reply..."
+                  value={replyBody}
+                  onChange={(e) => setReplyBody(e.target.value)}
+                  className="mt-1"
+                  rows={4}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReplyModal(false)}>
@@ -605,7 +670,9 @@ export default function InboxPage() {
             </Button>
             <Button onClick={handleSendReply}>
               <Send className="h-4 w-4 mr-2" />
-              Send {replyMessage?.source === 'whatsapp' ? 'WhatsApp' : 'Email'}
+              {replyMessage?.source === 'whatsapp' && !isWithin24HourWindow(selectedInbox) 
+                ? 'Send Template' 
+                : `Send ${replyMessage?.source === 'whatsapp' ? 'WhatsApp' : 'Email'}`}
             </Button>
           </DialogFooter>
         </DialogContent>

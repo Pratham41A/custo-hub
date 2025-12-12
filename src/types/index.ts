@@ -51,6 +51,7 @@ export interface Inbox {
   source: 'whatsapp' | 'email';
   isInitiated: boolean;
   query_types: string[];
+  whatsapp24HourWindowStartDateTime?: string;
   updated_at: string;
   created_at: string;
 }
@@ -86,7 +87,7 @@ export interface View {
   device: string;
 }
 
-export interface Activity {
+export interface Note {
   id: string;
   user: Pick<User, 'id' | 'name' | 'email' | 'mobile'>;
   body: string;
