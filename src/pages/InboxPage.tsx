@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   StickyNote,
   Reply,
+  User,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
@@ -74,7 +75,7 @@ export default function InboxPage() {
   const [customQueryType, setCustomQueryType] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
-  const [whatsappMessage, setWhatsappMessage] = useState('');
+  const [whatsappTemplateName, setWhatsappTemplateName] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Filter and sort inboxes
@@ -188,7 +189,7 @@ export default function InboxPage() {
   };
 
   const handleSendWhatsapp = async () => {
-    if (selectedInbox && whatsappMessage.trim()) {
+    if (selectedInbox && whatsappTemplateName.trim()) {
       toast({
         title: 'Sending WhatsApp Template...',
         description: 'Calling WhatsApp API',
@@ -200,10 +201,10 @@ export default function InboxPage() {
         id: `msg-${Date.now()}`,
         from: 'Support',
         to: selectedInbox.user.name,
-        body: whatsappMessage,
+        body: `Template: ${whatsappTemplateName}`,
         source: 'whatsapp',
         type: 'template',
-        template: whatsappMessage,
+        template: whatsappTemplateName,
         messageId: `MSG-${Date.now()}`,
         created_at: new Date().toISOString(),
         inbox_id: selectedInbox.id,
@@ -212,11 +213,11 @@ export default function InboxPage() {
       
       toast({
         title: 'WhatsApp Template Sent',
-        description: `Template sent to ${selectedInbox.user.mobile}`,
+        description: `Template "${whatsappTemplateName}" sent to ${selectedInbox.user.mobile}`,
       });
       
       setShowWhatsappModal(false);
-      setWhatsappMessage('');
+      setWhatsappTemplateName('');
     }
   };
 
@@ -308,6 +309,7 @@ export default function InboxPage() {
   };
 
   const canShowActions = selectedInbox && selectedInbox.status !== 'resolved';
+  const isConversationStarted = selectedInbox && (selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated');
 
   return (
     <MainLayout>
@@ -387,33 +389,50 @@ export default function InboxPage() {
                     <p className="text-sm text-muted-foreground">{selectedInbox.user.email}</p>
                   </div>
                 </div>
-                {canShowActions && (
-                  <div className="flex items-center gap-2">
-                    {selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated' ? (
-                      <>
-                        <Button variant="default" size="sm" onClick={handleEndConversation}>
-                          <Square className="h-4 w-4 mr-1" />
-                          End Conversation
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="default" size="sm" onClick={handleStartConversation}>
-                        <Play className="h-4 w-4 mr-1" />
-                        Start Conversation
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => setShowNotesModal(true)}>
-                      <StickyNote className="h-4 w-4 mr-1" />
-                      Create Note
-                    </Button>
-                    {selectedInbox.status !== 'escalated' && (
-                      <Button variant="outline" size="sm" onClick={handleEscalate}>
-                        <AlertTriangle className="h-4 w-4 mr-1" />
-                        Escalate
-                      </Button>
-                    )}
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {canShowActions && (
+                    <>
+                      {isConversationStarted ? (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => setShowNotesModal(true)}>
+                            <StickyNote className="h-4 w-4 mr-1" />
+                            Create Note
+                          </Button>
+                          <Button variant="default" size="sm" onClick={handleEndConversation}>
+                            <Square className="h-4 w-4 mr-1" />
+                            End Conversation
+                          </Button>
+                          {selectedInbox.status !== 'escalated' && (
+                            <Button variant="destructive" size="sm" onClick={handleEscalate}>
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              Escalate
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => setShowNotesModal(true)}>
+                            <StickyNote className="h-4 w-4 mr-1" />
+                            Create Note
+                          </Button>
+                          <Button variant="default" size="sm" onClick={handleStartConversation}>
+                            <Play className="h-4 w-4 mr-1" />
+                            Start Conversation
+                          </Button>
+                        </>
+                      )}
+                    </>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowContextPanel(!showContextPanel)}
+                    className="ml-2"
+                    title={showContextPanel ? 'Hide Customer Details' : 'Show Customer Details'}
+                  >
+                    <User className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
 
               {/* Messages */}
@@ -686,13 +705,12 @@ export default function InboxPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Message</label>
-              <Textarea
-                placeholder="Type your WhatsApp message..."
-                value={whatsappMessage}
-                onChange={(e) => setWhatsappMessage(e.target.value)}
+              <label className="text-sm font-medium">Template Name</label>
+              <Input
+                placeholder="Enter template name..."
+                value={whatsappTemplateName}
+                onChange={(e) => setWhatsappTemplateName(e.target.value)}
                 className="mt-1"
-                rows={5}
               />
             </div>
           </div>
@@ -702,7 +720,7 @@ export default function InboxPage() {
             </Button>
             <Button onClick={handleSendWhatsapp}>
               <Send className="h-4 w-4 mr-2" />
-              Send WhatsApp
+              Send Template
             </Button>
           </DialogFooter>
         </DialogContent>

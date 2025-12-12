@@ -1,6 +1,6 @@
 import { useGlobalStore } from '@/store/globalStore';
 import { Inbox } from '@/types';
-import { X, Mail, StickyNote, Phone, MapPin, Calendar, Monitor, Tag } from 'lucide-react';
+import { X, Mail, StickyNote, Phone, MapPin, Calendar, Monitor, Tag, PanelRightClose } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -40,8 +40,8 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
           {/* Header */}
           <div className="flex h-16 items-center justify-between border-b border-border px-4">
             <h2 className="text-lg font-semibold">Customer Details</h2>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-5 w-5" />
+            <Button variant="ghost" size="icon" onClick={onClose} title="Hide Customer Details">
+              <PanelRightClose className="h-5 w-5" />
             </Button>
           </div>
 
