@@ -22,7 +22,7 @@ interface ContextPanelProps {
 }
 
 export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
-  const { users, subscriptions, payments, views, activities } = useGlobalStore();
+  const { users, subscriptions, payments, views, notes } = useGlobalStore();
   const [activeModal, setActiveModal] = useState<'subscription' | 'payment' | 'view' | 'notes' | null>(null);
 
   if (!inbox) return null;
@@ -31,7 +31,7 @@ export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
   const userSubscriptions = subscriptions.filter((s) => s.user.id === inbox.user.id);
   const userPayments = payments.filter((p) => p.user.id === inbox.user.id);
   const userViews = views.filter((v) => v.user_id === inbox.user.id);
-  const userNotes = activities.filter((a) => a.user.id === inbox.user.id);
+  const userNotes = notes.filter((n) => n.user.id === inbox.user.id);
 
   return (
     <>

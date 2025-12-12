@@ -1,4 +1,4 @@
-import { User, Subscription, Payment, Inbox, Message, View, Activity, QueryType } from '@/types';
+import { User, Subscription, Payment, Inbox, Message, View, Note, QueryType } from '@/types';
 
 export const mockUsers: User[] = [
   {
@@ -167,6 +167,7 @@ export const mockInboxes: Inbox[] = [
     source: 'whatsapp',
     isInitiated: false,
     query_types: ['Technical Support'],
+    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
     updated_at: '2024-12-05T14:30:00Z',
     created_at: '2024-12-05T10:00:00Z',
   },
@@ -195,6 +196,7 @@ export const mockInboxes: Inbox[] = [
     source: 'whatsapp',
     isInitiated: false,
     query_types: ['General Inquiry'],
+    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(), // 30 hours ago (outside window)
     updated_at: '2024-12-04T18:00:00Z',
     created_at: '2024-12-03T09:00:00Z',
   },
@@ -223,6 +225,7 @@ export const mockInboxes: Inbox[] = [
     source: 'whatsapp',
     isInitiated: false,
     query_types: ['General Inquiry'],
+    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), // 12 hours ago
     updated_at: '2024-12-05T11:00:00Z',
     created_at: '2024-12-05T10:30:00Z',
   },
@@ -351,7 +354,7 @@ export const mockViews: View[] = [
   },
 ];
 
-export const mockActivities: Activity[] = [
+export const mockNotes: Note[] = [
   {
     id: '1',
     user: { id: '1', name: 'Dr. Sarah Johnson', email: 'sarah.johnson@hospital.com', mobile: '+1-555-0101' },
