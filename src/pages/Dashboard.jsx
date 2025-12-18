@@ -16,19 +16,17 @@ export default function Dashboard() {
     setDateRange
   } = useGlobalStore();
   const stats = getDashboardStats();
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [startDate, setStartDate] = useState(undefined);
+  const [endDate, setEndDate] = useState(undefined);
 
-  const handleStartDateSelect = (date: Date | undefined) => {
+  const handleStartDateSelect = (date) => {
     setStartDate(date);
-    // If end date is before new start date, reset end date
     if (date && endDate && date > endDate) {
       setEndDate(undefined);
     }
   };
 
-  const handleEndDateSelect = (date: Date | undefined) => {
-    // Only allow end date if it's after start date
+  const handleEndDateSelect = (date) => {
     if (date && startDate && date < startDate) {
       return;
     }

@@ -1,11 +1,6 @@
-import { ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 
-interface MainLayoutProps {
-  children: ReactNode;
-}
-
-export function MainLayout({ children }: MainLayoutProps) {
+export function MainLayout({ children }) {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
