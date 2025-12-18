@@ -1,65 +1,7 @@
 import { create } from 'zustand';
-import { User, Subscription, Payment, Inbox, Message, View, Note, QueryType, DashboardStats } from '@/types';
 import { mockUsers, mockSubscriptions, mockPayments, mockInboxes, mockMessages, mockViews, mockNotes, mockQueryTypes } from '@/data/mockData';
 
-interface GlobalState {
-  // Data
-  users: User[];
-  subscriptions: Subscription[];
-  payments: Payment[];
-  inboxes: Inbox[];
-  messages: Message[];
-  views: View[];
-  notes: Note[];
-  queryTypes: QueryType[];
-  
-  // UI State
-  selectedInbox: Inbox | null;
-  selectedUser: User | null;
-  activeFilter: string;
-  dateRange: { start: Date | null; end: Date | null };
-  
-  // Actions
-  setUsers: (users: User[]) => void;
-  setSubscriptions: (subscriptions: Subscription[]) => void;
-  setPayments: (payments: Payment[]) => void;
-  setInboxes: (inboxes: Inbox[]) => void;
-  setMessages: (messages: Message[]) => void;
-  setViews: (views: View[]) => void;
-  setNotes: (notes: Note[]) => void;
-  setQueryTypes: (queryTypes: QueryType[]) => void;
-  
-  setSelectedInbox: (inbox: Inbox | null) => void;
-  setSelectedUser: (user: User | null) => void;
-  setActiveFilter: (filter: string) => void;
-  setDateRange: (range: { start: Date | null; end: Date | null }) => void;
-  
-  // Inbox Operations
-  updateInboxStatus: (inboxId: string, status: Inbox['status']) => void;
-  addInbox: (inbox: Inbox) => void;
-  
-  // Message Operations
-  addMessage: (message: Message) => void;
-  
-  // Note Operations
-  addNote: (note: Note) => void;
-  
-  // Inbox Source Update
-  updateInboxSource: (inboxId: string, source: 'whatsapp' | 'email') => void;
-  
-  // Query Type Operations
-  addQueryType: (queryType: QueryType) => void;
-  
-  // Dashboard Stats
-  getDashboardStats: () => DashboardStats;
-  
-  // Socket Event Handlers
-  handleInboxUpdated: (inbox: Inbox) => void;
-  handleInboxCreated: (inbox: Inbox) => void;
-  handleMessageCreated: (message: Message) => void;
-}
-
-export const useGlobalStore = create<GlobalState>((set, get) => ({
+export const useGlobalStore = create((set, get) => ({
   // Initial Data
   users: mockUsers,
   subscriptions: mockSubscriptions,
@@ -135,7 +77,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
   // Dashboard Stats
   getDashboardStats: () => {
     const { inboxes } = get();
-    const stats: DashboardStats = {
+    const stats = {
       read: inboxes.filter((i) => i.status === 'read').length,
       unread: inboxes.filter((i) => i.status === 'unread').length,
       resolved: inboxes.filter((i) => i.status === 'resolved').length,

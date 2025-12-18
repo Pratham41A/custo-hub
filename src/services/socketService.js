@@ -1,12 +1,11 @@
-import { io, Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { useGlobalStore } from '@/store/globalStore';
-import { Inbox, Message } from '@/types';
 
 class SocketService {
-  private socket: Socket | null = null;
-  private isConnected = false;
+  socket = null;
+  isConnected = false;
 
-  connect(url: string = 'http://localhost:3001') {
+  connect(url = 'http://localhost:3001') {
     // For demo purposes, we'll simulate socket events
     console.log('Socket service initialized (mock mode)');
     this.isConnected = true;
@@ -21,17 +20,17 @@ class SocketService {
   }
 
   // Simulate incoming events for demo
-  simulateInboxUpdated(inbox: Inbox) {
+  simulateInboxUpdated(inbox) {
     const store = useGlobalStore.getState();
     store.handleInboxUpdated(inbox);
   }
 
-  simulateInboxCreated(inbox: Inbox) {
+  simulateInboxCreated(inbox) {
     const store = useGlobalStore.getState();
     store.handleInboxCreated(inbox);
   }
 
-  simulateMessageCreated(message: Message) {
+  simulateMessageCreated(message) {
     const store = useGlobalStore.getState();
     store.handleMessageCreated(message);
   }

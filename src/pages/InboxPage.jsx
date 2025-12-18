@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useGlobalStore } from '@/store/globalStore';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ContextPanel } from '@/components/layout/ContextPanel';
-import { Inbox, Message, InboxStatus } from '@/types';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,7 +36,7 @@ import {
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 
-const statusFilters: { value: string; label: string }[] = [
+const statusFilters = [
   { value: 'all', label: 'All' },
   { value: 'unread', label: 'Unread' },
   { value: 'read', label: 'Read' },
@@ -68,7 +67,7 @@ export default function InboxPage() {
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
-  const [replyMessage, setReplyMessage] = useState<Message | null>(null);
+  const [replyMessage, setReplyMessage] = useState(null);
   const [replyBody, setReplyBody] = useState('');
   const [replyTemplateName, setReplyTemplateName] = useState('');
   const [noteBody, setNoteBody] = useState('');
@@ -78,7 +77,7 @@ export default function InboxPage() {
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
   const [whatsappTemplateName, setWhatsappTemplateName] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef(null);
 
   // Filter and sort inboxes
   const filteredInboxes = inboxes
@@ -103,7 +102,7 @@ export default function InboxPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [inboxMessages]);
 
-  const handleInboxClick = (inbox: Inbox) => {
+  const handleInboxClick = (inbox) => {
     setSelectedInbox(inbox);
     setShowContextPanel(true);
     
@@ -165,7 +164,7 @@ export default function InboxPage() {
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const newMessage: Message = {
+      const newMessage = {
         id: `msg-${Date.now()}`,
         from: 'Support',
         to: selectedInbox.user.name,
@@ -199,7 +198,7 @@ export default function InboxPage() {
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const newMessage: Message = {
+      const newMessage = {
         id: `msg-${Date.now()}`,
         from: 'Support',
         to: selectedInbox.user.name,
@@ -225,7 +224,6 @@ export default function InboxPage() {
 
   const handleCreateNote = async () => {
     if (selectedInbox && noteBody && noteDueDate) {
-      // Mock API call
       toast({
         title: 'Creating Note...',
         description: 'Saving to database',
@@ -250,7 +248,7 @@ export default function InboxPage() {
     }
   };
 
-  const handleReplyClick = (message: Message) => {
+  const handleReplyClick = (message) => {
     setReplyMessage(message);
     setReplyBody('');
     setReplyTemplateName('');
@@ -258,7 +256,7 @@ export default function InboxPage() {
   };
 
   // Check if WhatsApp 24-hour window is active
-  const isWithin24HourWindow = (inbox: Inbox | null): boolean => {
+  const isWithin24HourWindow = (inbox) => {
     if (!inbox || !inbox.whatsapp24HourWindowStartDateTime) return false;
     const windowStart = new Date(inbox.whatsapp24HourWindowStartDateTime);
     const now = new Date();
@@ -283,7 +281,7 @@ export default function InboxPage() {
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const newMessage: Message = {
+      const newMessage = {
         id: `msg-${Date.now()}`,
         from: 'Support',
         to: selectedInbox.user.name,
@@ -320,7 +318,7 @@ export default function InboxPage() {
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const newMessage: Message = {
+      const newMessage = {
         id: `msg-${Date.now()}`,
         from: 'Support',
         to: selectedInbox.user.name,
@@ -346,8 +344,8 @@ export default function InboxPage() {
     setReplyTemplateName('');
   };
 
-  const getStatusBadge = (status: InboxStatus) => {
-    const variants: Record<InboxStatus, string> = {
+  const getStatusBadge = (status) => {
+    const variants = {
       read: 'bg-stat-read/10 text-stat-read border-stat-read/30',
       unread: 'bg-stat-unread/10 text-stat-unread border-stat-unread/30',
       started: 'bg-primary/10 text-primary border-primary/30',

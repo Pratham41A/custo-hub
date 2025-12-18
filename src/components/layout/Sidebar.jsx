@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Inbox, Users, MessageSquare, Settings, HelpCircle } from 'lucide-react';
+import { LayoutDashboard, Inbox, Settings, HelpCircle } from 'lucide-react';
+
 const navItems = [{
   path: '/',
   icon: LayoutDashboard,
@@ -10,6 +11,7 @@ const navItems = [{
   icon: Inbox,
   label: 'Inbox'
 }];
+
 const bottomNavItems = [{
   path: '/settings',
   icon: Settings,
@@ -19,9 +21,11 @@ const bottomNavItems = [{
   icon: HelpCircle,
   label: 'Help'
 }];
+
 export function Sidebar() {
   const location = useLocation();
-  return <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border">
+  return (
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border">
       <div className="flex h-full flex-col">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
@@ -31,19 +35,25 @@ export function Sidebar() {
         {/* Main Navigation */}
         <nav className="flex-1 space-y-1 px-3 py-4">
           {navItems.map(item => {
-          const isActive = location.pathname === item.path;
-          return <NavLink key={item.path} to={item.path} className={cn('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200', isActive ? 'bg-sidebar-accent text-sidebar-primary' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground')}>
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink 
+                key={item.path} 
+                to={item.path} 
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200', 
+                  isActive 
+                    ? 'bg-sidebar-accent text-sidebar-primary' 
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                )}
+              >
                 <item.icon className="h-5 w-5" />
                 {item.label}
-              </NavLink>;
-        })}
+              </NavLink>
+            );
+          })}
         </nav>
-
-        {/* Bottom Navigation */}
-        
-
-        {/* User Profile */}
-        
       </div>
-    </aside>;
+    </aside>
+  );
 }

@@ -1,6 +1,4 @@
-import { User, Subscription, Payment, Inbox, Message, View, Note, QueryType } from '@/types';
-
-export const mockUsers: User[] = [
+export const mockUsers = [
   {
     id: '1',
     name: 'Dr. Sarah Johnson',
@@ -99,7 +97,7 @@ export const mockUsers: User[] = [
   },
 ];
 
-export const mockSubscriptions: Subscription[] = [
+export const mockSubscriptions = [
   {
     id: '1',
     user: { id: '1', name: 'Dr. Sarah Johnson', mobile: '+1-555-0101', email: 'sarah.johnson@hospital.com' },
@@ -130,7 +128,7 @@ export const mockSubscriptions: Subscription[] = [
   },
 ];
 
-export const mockPayments: Payment[] = [
+export const mockPayments = [
   {
     id: '1',
     user: { id: '1', name: 'Dr. Sarah Johnson', mobile: '+1-555-0101', email: 'sarah.johnson@hospital.com' },
@@ -155,7 +153,7 @@ export const mockPayments: Payment[] = [
   },
 ];
 
-export const mockInboxes: Inbox[] = [
+export const mockInboxes = [
   {
     id: '1',
     user: { id: '1', name: 'Dr. Sarah Johnson', email: 'sarah.johnson@hospital.com', mobile: '+1-555-0101' },
@@ -167,7 +165,7 @@ export const mockInboxes: Inbox[] = [
     source: 'whatsapp',
     isInitiated: false,
     query_types: ['Technical Support'],
-    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     updated_at: '2024-12-05T14:30:00Z',
     created_at: '2024-12-05T10:00:00Z',
   },
@@ -196,7 +194,7 @@ export const mockInboxes: Inbox[] = [
     source: 'whatsapp',
     isInitiated: false,
     query_types: ['General Inquiry'],
-    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(), // 30 hours ago (outside window)
+    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
     updated_at: '2024-12-04T18:00:00Z',
     created_at: '2024-12-03T09:00:00Z',
   },
@@ -225,7 +223,7 @@ export const mockInboxes: Inbox[] = [
     source: 'whatsapp',
     isInitiated: false,
     query_types: ['General Inquiry'],
-    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), // 12 hours ago
+    whatsapp24HourWindowStartDateTime: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
     updated_at: '2024-12-05T11:00:00Z',
     created_at: '2024-12-05T10:30:00Z',
   },
@@ -245,7 +243,7 @@ export const mockInboxes: Inbox[] = [
   },
 ];
 
-export const mockMessages: Message[] = [
+export const mockMessages = [
   {
     id: '1',
     from: 'Dr. Sarah Johnson',
@@ -329,7 +327,7 @@ export const mockMessages: Message[] = [
   },
 ];
 
-export const mockViews: View[] = [
+export const mockViews = [
   {
     id: '1',
     user_id: '1',
@@ -354,7 +352,7 @@ export const mockViews: View[] = [
   },
 ];
 
-export const mockNotes: Note[] = [
+export const mockNotes = [
   {
     id: '1',
     user: { id: '1', name: 'Dr. Sarah Johnson', email: 'sarah.johnson@hospital.com', mobile: '+1-555-0101' },
@@ -371,7 +369,7 @@ export const mockNotes: Note[] = [
   },
 ];
 
-export const mockQueryTypes: QueryType[] = [
+export const mockQueryTypes = [
   { id: '1', name: 'Technical Support' },
   { id: '2', name: 'Billing' },
   { id: '3', name: 'General Inquiry' },

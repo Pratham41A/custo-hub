@@ -1,5 +1,4 @@
 import { useGlobalStore } from '@/store/globalStore';
-import { Inbox } from '@/types';
 import { X, Mail, StickyNote, Phone, MapPin, Calendar, Monitor, Tag, PanelRightClose } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,14 +15,9 @@ import {
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-interface ContextPanelProps {
-  inbox?: Inbox | null;
-  onClose: () => void;
-}
-
-export function ContextPanel({ inbox, onClose }: ContextPanelProps) {
+export function ContextPanel({ inbox, onClose }) {
   const { users, subscriptions, payments, views, notes } = useGlobalStore();
-  const [activeModal, setActiveModal] = useState<'subscription' | 'payment' | 'view' | 'notes' | null>(null);
+  const [activeModal, setActiveModal] = useState(null);
 
   if (!inbox) return null;
 
