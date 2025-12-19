@@ -1,59 +1,90 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { cn } from '@/lib/utils';
-import { LayoutDashboard, Inbox, Settings, HelpCircle } from 'lucide-react';
+import Box from '@mui/material/Box';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import InboxIcon from '@mui/icons-material/Inbox';
+import { customColors } from '@/theme/theme';
 
-const navItems = [{
-  path: '/',
-  icon: LayoutDashboard,
-  label: 'Dashboard'
-}, {
-  path: '/inbox',
-  icon: Inbox,
-  label: 'Inbox'
-}];
-
-const bottomNavItems = [{
-  path: '/settings',
-  icon: Settings,
-  label: 'Settings'
-}, {
-  path: '/help',
-  icon: HelpCircle,
-  label: 'Help'
-}];
+const navItems = [
+  { path: '/', icon: DashboardIcon, label: 'Dashboard' },
+  { path: '/inbox', icon: InboxIcon, label: 'Inbox' },
+];
 
 export function Sidebar() {
   const location = useLocation();
+
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border">
-      <div className="flex h-full flex-col">
+    <Box
+      component="aside"
+      sx={{
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        zIndex: 40,
+        height: '100vh',
+        width: 256,
+        bgcolor: customColors.sidebar.background,
+        borderRight: 1,
+        borderColor: customColors.sidebar.accent,
+      }}
+    >
+      <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
         {/* Logo */}
-        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          <img src="/images/onfnewlogo.png" alt="Onference Logo" className="h-8 w-auto" />
-        </div>
+        <Box
+          sx={{
+            display: 'flex',
+            height: 64,
+            alignItems: 'center',
+            gap: 1.5,
+            borderBottom: 1,
+            borderColor: customColors.sidebar.accent,
+            px: 3,
+          }}
+        >
+          <img src="/images/onfnewlogo.png" alt="Onference Logo" style={{ height: 32, width: 'auto' }} />
+        </Box>
 
         {/* Main Navigation */}
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          {navItems.map(item => {
+        <List sx={{ flex: 1, px: 1.5, py: 2 }}>
+          {navItems.map((item) => {
             const isActive = location.pathname === item.path;
+            const Icon = item.icon;
             return (
-              <NavLink 
-                key={item.path} 
-                to={item.path} 
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200', 
-                  isActive 
-                    ? 'bg-sidebar-accent text-sidebar-primary' 
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </NavLink>
+              <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
+                <ListItemButton
+                  component={NavLink}
+                  to={item.path}
+                  sx={{
+                    borderRadius: 2,
+                    px: 1.5,
+                    py: 1.25,
+                    bgcolor: isActive ? customColors.sidebar.accent : 'transparent',
+                    color: isActive ? customColors.sidebar.primary : customColors.sidebar.foreground,
+                    '&:hover': {
+                      bgcolor: customColors.sidebar.accent,
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                    <Icon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={item.label} 
+                    primaryTypographyProps={{ 
+                      fontWeight: isActive ? 600 : 500,
+                      fontSize: '0.875rem',
+                    }} 
+                  />
+                </ListItemButton>
+              </ListItem>
             );
           })}
-        </nav>
-      </div>
-    </aside>
+        </List>
+      </Box>
+    </Box>
   );
 }
