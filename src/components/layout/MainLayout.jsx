@@ -1,12 +1,13 @@
+import Box from '@mui/material/Box';
 import { Sidebar } from './Sidebar';
 
 export function MainLayout({ children }) {
   return (
-    <div className="min-h-screen bg-background">
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       <Sidebar />
-      <main className="ml-64 min-h-screen">
+      <Box component="main" sx={{ flexGrow: 1, ml: '256px', minHeight: '100vh' }}>
         {children}
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }
