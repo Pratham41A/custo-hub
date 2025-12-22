@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGlobalStore } from '@/store/globalStore';
 import { format } from 'date-fns';
 import Box from '@mui/material/Box';
@@ -8,6 +8,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import Popover from '@mui/material/Popover';
+import CircularProgress from '@mui/material/CircularProgress';
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -20,17 +21,55 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import WarningIcon from '@mui/icons-material/Warning';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import LinearProgress from '@mui/material/LinearProgress';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { customColors } from '@/theme/theme';
+import { useSnackbar } from 'notistack';
 
 export default function Dashboard() {
-  const { getDashboardStats, queryTypes } = useGlobalStore();
+  const { getDashboardStats, fetchDashboard, fetchInboxes, loading, queryTypes } = useGlobalStore();
+  const { enqueueSnackbar } = useSnackbar();
   const stats = getDashboardStats();
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [startAnchorEl, setStartAnchorEl] = useState(null);
   const [endAnchorEl, setEndAnchorEl] = useState(null);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      await Promise.all([
+        fetchDashboard(),
+        fetchInboxes({ limit: 100 }),
+      ]);
+    } catch (error) {
+      enqueueSnackbar('Failed to load dashboard data', { variant: 'error' });
+    }
+  };
+
+  const handleRefresh = () => {
+    loadData();
+    enqueueSnackbar('Refreshing dashboard...', { variant: 'info' });
+  };
+
+  const handleDateFilter = async () => {
+    if (startDate || endDate) {
+      try {
+        await fetchInboxes({
+          startDate: startDate ? format(startDate, 'yyyy-MM-dd') : '',
+          endDate: endDate ? format(endDate, 'yyyy-MM-dd') : '',
+          limit: 100,
+        });
+        enqueueSnackbar('Data filtered by date range', { variant: 'success' });
+      } catch (error) {
+        enqueueSnackbar('Failed to filter data', { variant: 'error' });
+      }
+    }
+  };
 
   const handleStartDateSelect = (date) => {
     setStartDate(date);
@@ -48,10 +87,16 @@ export default function Dashboard() {
     setEndAnchorEl(null);
   };
 
+  useEffect(() => {
+    if (startDate && endDate) {
+      handleDateFilter();
+    }
+  }, [startDate, endDate]);
+
   const statCards = [
     { 
       label: 'Read', 
-      value: stats.read, 
+      value: stats.read || 0, 
       icon: VisibilityIcon, 
       color: customColors.stat.read,
       gradient: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
@@ -59,7 +104,7 @@ export default function Dashboard() {
     },
     { 
       label: 'Unread', 
-      value: stats.unread, 
+      value: stats.unread || 0, 
       icon: VisibilityOffIcon, 
       color: customColors.stat.unread,
       gradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
@@ -67,7 +112,7 @@ export default function Dashboard() {
     },
     { 
       label: 'Resolved', 
-      value: stats.resolved, 
+      value: stats.resolved || 0, 
       icon: CheckCircleIcon, 
       color: customColors.stat.resolved,
       gradient: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
@@ -75,7 +120,7 @@ export default function Dashboard() {
     },
     { 
       label: 'Pending', 
-      value: stats.pending, 
+      value: stats.pending || 0, 
       icon: AccessTimeIcon, 
       color: customColors.stat.pending,
       gradient: 'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)',
@@ -83,13 +128,15 @@ export default function Dashboard() {
     },
     { 
       label: 'Escalated', 
-      value: stats.escalated, 
+      value: stats.escalated || 0, 
       icon: WarningIcon, 
       color: customColors.stat.escalated,
       gradient: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
       bgClass: 'stat-card-red',
     },
   ];
+
+  const isLoading = loading.dashboard || loading.inboxes;
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -124,6 +171,18 @@ export default function Dashboard() {
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Button
+                variant="outlined"
+                startIcon={isLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
+                onClick={handleRefresh}
+                disabled={isLoading}
+                sx={{ 
+                  bgcolor: 'background.paper',
+                  borderColor: 'divider',
+                }}
+              >
+                Refresh
+              </Button>
               <Button
                 variant="outlined"
                 startIcon={<CalendarTodayIcon sx={{ fontSize: 18 }} />}
@@ -182,6 +241,13 @@ export default function Dashboard() {
               </Popover>
             </Box>
           </Box>
+
+          {/* Loading overlay */}
+          {isLoading && (
+            <Box sx={{ mb: 2 }}>
+              <LinearProgress />
+            </Box>
+          )}
 
           {/* Status Cards */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -288,15 +354,14 @@ export default function Dashboard() {
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                    {queryTypes.map((qt, index) => {
-                      const count = stats.queryTypeStats[qt.name] || 0;
-                      const maxCount = Math.max(...Object.values(stats.queryTypeStats), 1);
+                    {Object.entries(stats.queryTypeStats || {}).map(([name, count], index) => {
+                      const maxCount = Math.max(...Object.values(stats.queryTypeStats || {}), 1);
                       const percentage = (count / maxCount) * 100;
                       return (
-                        <Box key={qt.id}>
+                        <Box key={name}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                             <Typography variant="body2" fontWeight={500}>
-                              {qt.name}
+                              {name}
                             </Typography>
                             <Typography 
                               variant="body2" 
@@ -321,7 +386,7 @@ export default function Dashboard() {
                         </Box>
                       );
                     })}
-                    {Object.keys(stats.queryTypeStats).length === 0 && (
+                    {Object.keys(stats.queryTypeStats || {}).length === 0 && (
                       <Box sx={{ textAlign: 'center', py: 4 }}>
                         <Typography variant="body2" color="text.secondary">
                           No resolved queries yet
@@ -385,7 +450,7 @@ export default function Dashboard() {
                             lineHeight: 1,
                           }}
                         >
-                          {stats.whatsappResolved}
+                          {stats.whatsappResolved || 0}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" mt={1}>
                           Resolved conversations
@@ -431,7 +496,7 @@ export default function Dashboard() {
                             lineHeight: 1,
                           }}
                         >
-                          {stats.emailResolved}
+                          {stats.emailResolved || 0}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" mt={1}>
                           Resolved conversations
