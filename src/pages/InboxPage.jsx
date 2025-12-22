@@ -17,6 +17,8 @@ import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Avatar from '@mui/material/Avatar';
+import CircularProgress from '@mui/material/CircularProgress';
+import Skeleton from '@mui/material/Skeleton';
 import ChatIcon from '@mui/icons-material/Chat';
 import EmailIcon from '@mui/icons-material/Email';
 import SendIcon from '@mui/icons-material/Send';
@@ -25,7 +27,7 @@ import StopIcon from '@mui/icons-material/Stop';
 import WarningIcon from '@mui/icons-material/Warning';
 import NoteIcon from '@mui/icons-material/Note';
 import ReplyIcon from '@mui/icons-material/Reply';
-import PersonIcon from '@mui/icons-material/Person';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { format } from 'date-fns';
 import { useSnackbar } from 'notistack';
 import { customColors } from '@/theme/theme';
@@ -46,11 +48,16 @@ export default function InboxPage() {
     selectedInbox,
     setSelectedInbox,
     updateInboxStatus,
-    addMessage,
-    addNote,
-    queryTypes,
     activeFilter,
     setActiveFilter,
+    loading,
+    fetchInboxes,
+    fetchMessages,
+    sendWhatsappTemplate,
+    sendWhatsappMessage,
+    sendEmailReply,
+    sendNewEmail,
+    createNote,
   } = useGlobalStore();
 
   const { enqueueSnackbar } = useSnackbar();
@@ -71,39 +78,60 @@ export default function InboxPage() {
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
   const [whatsappTemplateName, setWhatsappTemplateName] = useState('');
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    loadInboxes();
+  }, [activeFilter]);
+
+  const loadInboxes = async () => {
+    try {
+      await fetchInboxes({ status: activeFilter === 'all' ? '' : activeFilter });
+    } catch (error) {
+      enqueueSnackbar('Failed to load inboxes', { variant: 'error' });
+    }
+  };
 
   const filteredInboxes = inboxes
     .filter((inbox) => activeFilter === 'all' || inbox.status === activeFilter)
     .sort((a, b) => {
       if (a.status === 'unread' && b.status !== 'unread') return -1;
       if (a.status !== 'unread' && b.status === 'unread') return 1;
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      return new Date(b.updated_at || b.updatedAt).getTime() - new Date(a.updated_at || a.updatedAt).getTime();
     });
 
-  const inboxMessages = selectedInbox
-    ? messages
-        .filter((m) => m.inbox_id === selectedInbox.id)
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    : [];
+  const inboxMessages = messages
+    .filter((m) => m.inbox_id === selectedInbox?.id || m.inbox_id === selectedInbox?._id || m.inboxId === selectedInbox?.id)
+    .sort((a, b) => new Date(a.created_at || a.createdAt).getTime() - new Date(b.created_at || b.createdAt).getTime());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [inboxMessages]);
 
-  const handleInboxClick = (inbox) => {
+  const handleInboxClick = async (inbox) => {
     setSelectedInbox(inbox);
     setShowContextPanel(true);
-    if (inbox.status === 'unread') {
-      updateInboxStatus(inbox.id, 'read');
-      enqueueSnackbar('Marked as read', { variant: 'info' });
+    
+    try {
+      await fetchMessages(inbox.id || inbox._id);
+      if (inbox.status === 'unread') {
+        await updateInboxStatus(inbox.id || inbox._id, 'read');
+        enqueueSnackbar('Marked as read', { variant: 'info' });
+      }
+    } catch (error) {
+      enqueueSnackbar('Failed to load messages', { variant: 'error' });
     }
   };
 
-  const handleStartConversation = () => {
+  const handleStartConversation = async () => {
     if (selectedInbox) {
-      updateInboxStatus(selectedInbox.id, 'started');
-      enqueueSnackbar('Conversation started', { variant: 'success' });
+      try {
+        await updateInboxStatus(selectedInbox.id || selectedInbox._id, 'started');
+        enqueueSnackbar('Conversation started', { variant: 'success' });
+      } catch (error) {
+        enqueueSnackbar('Failed to start conversation', { variant: 'error' });
+      }
     }
   };
 
@@ -111,89 +139,82 @@ export default function InboxPage() {
     setShowQueryModal(true);
   };
 
-  const handleResolve = () => {
+  const handleResolve = async () => {
     const queryType = customQueryType || selectedQueryType;
     if (selectedInbox && queryType) {
-      updateInboxStatus(selectedInbox.id, 'resolved');
-      enqueueSnackbar(`Resolved - Query type: ${queryType}`, { variant: 'success' });
-      setShowQueryModal(false);
-      setSelectedQueryType('');
-      setCustomQueryType('');
+      try {
+        await updateInboxStatus(selectedInbox.id || selectedInbox._id, 'resolved', queryType);
+        enqueueSnackbar(`Resolved - Query type: ${queryType}`, { variant: 'success' });
+        setShowQueryModal(false);
+        setSelectedQueryType('');
+        setCustomQueryType('');
+      } catch (error) {
+        enqueueSnackbar('Failed to resolve conversation', { variant: 'error' });
+      }
     }
   };
 
-  const handleEscalate = () => {
+  const handleEscalate = async () => {
     if (selectedInbox) {
-      updateInboxStatus(selectedInbox.id, 'escalated');
-      enqueueSnackbar('Conversation escalated', { variant: 'warning' });
+      try {
+        await updateInboxStatus(selectedInbox.id || selectedInbox._id, 'escalated');
+        enqueueSnackbar('Conversation escalated', { variant: 'warning' });
+      } catch (error) {
+        enqueueSnackbar('Failed to escalate conversation', { variant: 'error' });
+      }
     }
   };
 
   const handleSendEmail = async () => {
     if (selectedInbox && emailSubject.trim() && emailBody.trim()) {
-      enqueueSnackbar('Sending email...', { variant: 'info' });
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      const newMessage = {
-        id: `msg-${Date.now()}`,
-        from: 'Support',
-        to: selectedInbox.user.name,
-        subject: emailSubject,
-        body: emailBody,
-        source: 'email',
-        type: 'body',
-        messageId: `MSG-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        inbox_id: selectedInbox.id,
-      };
-      addMessage(newMessage);
-      enqueueSnackbar(`Email sent to ${selectedInbox.user.email}`, { variant: 'success' });
-      setShowEmailModal(false);
-      setEmailSubject('');
-      setEmailBody('');
+      setSending(true);
+      try {
+        await sendNewEmail(emailSubject, emailBody, selectedInbox.user?.email);
+        enqueueSnackbar(`Email sent to ${selectedInbox.user?.email}`, { variant: 'success' });
+        setShowEmailModal(false);
+        setEmailSubject('');
+        setEmailBody('');
+        // Refresh messages
+        await fetchMessages(selectedInbox.id || selectedInbox._id);
+      } catch (error) {
+        enqueueSnackbar('Failed to send email', { variant: 'error' });
+      } finally {
+        setSending(false);
+      }
     }
   };
 
   const handleSendWhatsapp = async () => {
     if (selectedInbox && whatsappTemplateName.trim()) {
-      enqueueSnackbar('Sending WhatsApp template...', { variant: 'info' });
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      const newMessage = {
-        id: `msg-${Date.now()}`,
-        from: 'Support',
-        to: selectedInbox.user.name,
-        body: `Template: ${whatsappTemplateName}`,
-        source: 'whatsapp',
-        type: 'template',
-        template: whatsappTemplateName,
-        messageId: `MSG-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        inbox_id: selectedInbox.id,
-      };
-      addMessage(newMessage);
-      enqueueSnackbar(`WhatsApp template sent to ${selectedInbox.user.mobile}`, { variant: 'success' });
-      setShowWhatsappModal(false);
-      setWhatsappTemplateName('');
+      setSending(true);
+      try {
+        await sendWhatsappTemplate(selectedInbox.user?.mobile, whatsappTemplateName);
+        enqueueSnackbar(`WhatsApp template sent to ${selectedInbox.user?.mobile}`, { variant: 'success' });
+        setShowWhatsappModal(false);
+        setWhatsappTemplateName('');
+        await fetchMessages(selectedInbox.id || selectedInbox._id);
+      } catch (error) {
+        enqueueSnackbar('Failed to send WhatsApp template', { variant: 'error' });
+      } finally {
+        setSending(false);
+      }
     }
   };
 
   const handleCreateNote = async () => {
     if (selectedInbox && noteBody && noteDueDate) {
-      enqueueSnackbar('Creating note...', { variant: 'info' });
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      addNote({
-        id: `note-${Date.now()}`,
-        user: selectedInbox.user,
-        body: noteBody,
-        due_date: noteDueDate,
-        created_at: new Date().toISOString(),
-      });
-      setShowNotesModal(false);
-      setNoteBody('');
-      setNoteDueDate('');
-      enqueueSnackbar('Note created', { variant: 'success' });
+      setSending(true);
+      try {
+        await createNote(selectedInbox.user?.id || selectedInbox.user?._id, noteBody, noteDueDate);
+        setShowNotesModal(false);
+        setNoteBody('');
+        setNoteDueDate('');
+        enqueueSnackbar('Note created', { variant: 'success' });
+      } catch (error) {
+        enqueueSnackbar('Failed to create note', { variant: 'error' });
+      } finally {
+        setSending(false);
+      }
     }
   };
 
@@ -218,53 +239,32 @@ export default function InboxPage() {
     const isWhatsApp = replyMessage.source === 'whatsapp';
     const within24Hours = isWithin24HourWindow(selectedInbox);
 
-    if (isWhatsApp && !within24Hours) {
-      if (!replyTemplateName.trim()) return;
-
-      enqueueSnackbar('Sending WhatsApp template...', { variant: 'info' });
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      const newMessage = {
-        id: `msg-${Date.now()}`,
-        from: 'Support',
-        to: selectedInbox.user.name,
-        body: `Template: ${replyTemplateName}`,
-        source: 'whatsapp',
-        type: 'template',
-        template: replyTemplateName,
-        messageId: `MSG-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        inbox_id: selectedInbox.id,
-        inReplyTo: replyMessage.messageId,
-      };
-      addMessage(newMessage);
-      enqueueSnackbar('WhatsApp template reply sent', { variant: 'success' });
-    } else {
-      if (!replyBody.trim()) return;
-
-      enqueueSnackbar(isWhatsApp ? 'Sending WhatsApp message...' : 'Sending email...', { variant: 'info' });
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      const newMessage = {
-        id: `msg-${Date.now()}`,
-        from: 'Support',
-        to: selectedInbox.user.name,
-        body: replyBody,
-        source: replyMessage.source,
-        type: 'body',
-        messageId: `MSG-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        inbox_id: selectedInbox.id,
-        inReplyTo: replyMessage.messageId,
-      };
-      addMessage(newMessage);
-      enqueueSnackbar(isWhatsApp ? 'WhatsApp message sent' : 'Email sent', { variant: 'success' });
+    setSending(true);
+    try {
+      if (isWhatsApp && !within24Hours) {
+        if (!replyTemplateName.trim()) return;
+        await sendWhatsappTemplate(selectedInbox.user?.mobile, replyTemplateName);
+        enqueueSnackbar('WhatsApp template reply sent', { variant: 'success' });
+      } else if (isWhatsApp) {
+        if (!replyBody.trim()) return;
+        await sendWhatsappMessage(selectedInbox.user?.mobile, replyBody);
+        enqueueSnackbar('WhatsApp message sent', { variant: 'success' });
+      } else {
+        if (!replyBody.trim()) return;
+        await sendEmailReply(replyMessage.messageId, replyBody, selectedInbox.user?.email);
+        enqueueSnackbar('Email reply sent', { variant: 'success' });
+      }
+      
+      await fetchMessages(selectedInbox.id || selectedInbox._id);
+    } catch (error) {
+      enqueueSnackbar('Failed to send reply', { variant: 'error' });
+    } finally {
+      setSending(false);
+      setShowReplyModal(false);
+      setReplyMessage(null);
+      setReplyBody('');
+      setReplyTemplateName('');
     }
-
-    setShowReplyModal(false);
-    setReplyMessage(null);
-    setReplyBody('');
-    setReplyTemplateName('');
   };
 
   const getStatusChip = (status) => {
@@ -296,6 +296,9 @@ export default function InboxPage() {
   const isConversationStarted =
     selectedInbox && (selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated');
 
+  const getInboxUser = (inbox) => inbox.user || {};
+  const getMessageDate = (msg) => msg.created_at || msg.createdAt;
+
   return (
     <MainLayout>
       <Box 
@@ -320,9 +323,18 @@ export default function InboxPage() {
         >
           {/* Header & Filters */}
           <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="h5" fontWeight={700} mb={0.5}>
-              Inbox
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography variant="h5" fontWeight={700}>
+                Inbox
+              </Typography>
+              <IconButton 
+                size="small" 
+                onClick={loadInboxes}
+                disabled={loading.inboxes}
+              >
+                {loading.inboxes ? <CircularProgress size={20} /> : <RefreshIcon />}
+              </IconButton>
+            </Box>
             <Typography variant="body2" color="text.secondary" mb={2}>
               {filteredInboxes.length} conversations
             </Typography>
@@ -353,79 +365,101 @@ export default function InboxPage() {
 
           {/* Inbox Items */}
           <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
-            {filteredInboxes.map((inbox) => (
-              <Box
-                key={inbox.id}
-                onClick={() => handleInboxClick(inbox)}
-                className={`inbox-item ${selectedInbox?.id === inbox.id ? 'active' : ''}`}
-                sx={{
-                  p: 2,
-                  mb: 1,
-                  borderRadius: 3,
-                  cursor: 'pointer',
-                  border: '1px solid',
-                  borderColor: selectedInbox?.id === inbox.id ? 'primary.main' : 'transparent',
-                  bgcolor: selectedInbox?.id === inbox.id ? 'rgba(99, 102, 241, 0.06)' : inbox.status === 'unread' ? 'rgba(245, 158, 11, 0.04)' : 'background.paper',
-                  transition: 'all 0.2s',
-                  '&:hover': { 
-                    bgcolor: selectedInbox?.id === inbox.id ? 'rgba(99, 102, 241, 0.08)' : 'rgba(0,0,0,0.02)',
-                    boxShadow: '0 4px 12px -4px rgba(0,0,0,0.1)',
-                  },
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                  <Avatar
-                    sx={{ 
-                      width: 44, 
-                      height: 44, 
-                      bgcolor: inbox.source === 'whatsapp' ? `${customColors.channel.whatsapp}20` : `${customColors.channel.email}20`,
-                      color: inbox.source === 'whatsapp' ? customColors.channel.whatsapp : customColors.channel.email,
-                      fontWeight: 600,
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    {inbox.user.name.split(' ').map((n) => n[0]).join('')}
-                  </Avatar>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {inbox.source === 'whatsapp' ? (
-                          <ChatIcon sx={{ fontSize: 14, color: customColors.channel.whatsapp }} />
-                        ) : (
-                          <EmailIcon sx={{ fontSize: 14, color: customColors.channel.email }} />
-                        )}
-                        <Typography 
-                          fontWeight={inbox.status === 'unread' ? 700 : 600} 
-                          noWrap
-                          sx={{ fontSize: '0.9rem' }}
-                        >
-                          {inbox.user.name}
-                        </Typography>
-                      </Box>
-                      {getStatusChip(inbox.status)}
+            {loading.inboxes ? (
+              [...Array(5)].map((_, i) => (
+                <Box key={i} sx={{ p: 2, mb: 1 }}>
+                  <Box sx={{ display: 'flex', gap: 1.5 }}>
+                    <Skeleton variant="circular" width={44} height={44} />
+                    <Box sx={{ flex: 1 }}>
+                      <Skeleton variant="text" width="60%" />
+                      <Skeleton variant="text" width="100%" />
+                      <Skeleton variant="text" width="40%" />
                     </Box>
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary" 
-                      sx={{ 
-                        display: '-webkit-box', 
-                        WebkitLineClamp: 2, 
-                        WebkitBoxOrient: 'vertical', 
-                        overflow: 'hidden',
-                        lineHeight: 1.5,
-                        mb: 1,
-                      }}
-                    >
-                      {inbox.preview}
-                    </Typography>
-                    <Typography variant="caption" color="text.disabled">
-                      {format(new Date(inbox.updated_at), 'MMM d, h:mm a')}
-                    </Typography>
                   </Box>
                 </Box>
-              </Box>
-            ))}
-            {filteredInboxes.length === 0 && (
+              ))
+            ) : (
+              filteredInboxes.map((inbox) => {
+                const user = getInboxUser(inbox);
+                return (
+                  <Box
+                    key={inbox.id || inbox._id}
+                    onClick={() => handleInboxClick(inbox)}
+                    className={`inbox-item ${(selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) ? 'active' : ''}`}
+                    sx={{
+                      p: 2,
+                      mb: 1,
+                      borderRadius: 3,
+                      cursor: 'pointer',
+                      border: '1px solid',
+                      borderColor: (selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) ? 'primary.main' : 'transparent',
+                      bgcolor: (selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) 
+                        ? 'rgba(99, 102, 241, 0.06)' 
+                        : inbox.status === 'unread' ? 'rgba(245, 158, 11, 0.04)' : 'background.paper',
+                      transition: 'all 0.2s',
+                      '&:hover': { 
+                        bgcolor: (selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) 
+                          ? 'rgba(99, 102, 241, 0.08)' 
+                          : 'rgba(0,0,0,0.02)',
+                        boxShadow: '0 4px 12px -4px rgba(0,0,0,0.1)',
+                      },
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                      <Avatar
+                        sx={{ 
+                          width: 44, 
+                          height: 44, 
+                          bgcolor: inbox.source === 'whatsapp' ? `${customColors.channel.whatsapp}20` : `${customColors.channel.email}20`,
+                          color: inbox.source === 'whatsapp' ? customColors.channel.whatsapp : customColors.channel.email,
+                          fontWeight: 600,
+                          fontSize: '0.9rem',
+                        }}
+                      >
+                        {(user.name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {inbox.source === 'whatsapp' ? (
+                              <ChatIcon sx={{ fontSize: 14, color: customColors.channel.whatsapp }} />
+                            ) : (
+                              <EmailIcon sx={{ fontSize: 14, color: customColors.channel.email }} />
+                            )}
+                            <Typography 
+                              fontWeight={inbox.status === 'unread' ? 700 : 600} 
+                              noWrap
+                              sx={{ fontSize: '0.9rem' }}
+                            >
+                              {user.name || 'Unknown User'}
+                            </Typography>
+                          </Box>
+                          {getStatusChip(inbox.status)}
+                        </Box>
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary" 
+                          sx={{ 
+                            display: '-webkit-box', 
+                            WebkitLineClamp: 2, 
+                            WebkitBoxOrient: 'vertical', 
+                            overflow: 'hidden',
+                            lineHeight: 1.5,
+                            mb: 1,
+                          }}
+                        >
+                          {inbox.preview || 'No preview available'}
+                        </Typography>
+                        <Typography variant="caption" color="text.disabled">
+                          {format(new Date(inbox.updated_at || inbox.updatedAt || new Date()), 'MMM d, h:mm a')}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                );
+              })
+            )}
+            {!loading.inboxes && filteredInboxes.length === 0 && (
               <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
                 <ChatIcon sx={{ fontSize: 48, opacity: 0.3, mb: 2 }} />
                 <Typography>No conversations found</Typography>
@@ -461,413 +495,384 @@ export default function InboxPage() {
                       fontWeight: 600,
                     }}
                   >
-                    {selectedInbox.user.name.split(' ').map((n) => n[0]).join('')}
+                    {(getInboxUser(selectedInbox).name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2)}
                   </Avatar>
                   <Box>
                     <Typography fontWeight={600} fontSize="1rem">
-                      {selectedInbox.user.name}
+                      {getInboxUser(selectedInbox).name || 'Unknown User'}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {selectedInbox.user.email}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {selectedInbox.source === 'whatsapp' ? (
+                        <ChatIcon sx={{ fontSize: 14, color: customColors.channel.whatsapp }} />
+                      ) : (
+                        <EmailIcon sx={{ fontSize: 14, color: customColors.channel.email }} />
+                      )}
+                      <Typography variant="body2" color="text.secondary">
+                        {getInboxUser(selectedInbox).email || getInboxUser(selectedInbox).mobile}
+                      </Typography>
+                    </Box>
                   </Box>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  {getStatusChip(selectedInbox.status)}
                   {canShowActions && (
                     <>
-                      {isConversationStarted ? (
-                        <>
-                          <Button 
-                            variant="outlined" 
-                            size="small" 
-                            startIcon={<NoteIcon />} 
-                            onClick={() => setShowNotesModal(true)}
-                            sx={{ borderRadius: 2 }}
-                          >
-                            Note
-                          </Button>
-                          <Button 
-                            variant="contained" 
-                            size="small" 
-                            startIcon={<StopIcon />} 
-                            onClick={handleEndConversation}
-                            sx={{ borderRadius: 2 }}
-                          >
-                            End
-                          </Button>
-                          {selectedInbox.status !== 'escalated' && (
-                            <Button 
-                              variant="contained" 
-                              color="error" 
-                              size="small" 
-                              startIcon={<WarningIcon />} 
-                              onClick={handleEscalate}
-                              sx={{ borderRadius: 2 }}
-                            >
-                              Escalate
-                            </Button>
-                          )}
-                        </>
+                      {!isConversationStarted ? (
+                        <Button
+                          variant="contained"
+                          startIcon={<PlayArrowIcon />}
+                          onClick={handleStartConversation}
+                          size="small"
+                          sx={{ bgcolor: 'success.main' }}
+                        >
+                          Start
+                        </Button>
                       ) : (
                         <>
-                          <Button 
-                            variant="outlined" 
-                            size="small" 
-                            startIcon={<NoteIcon />} 
-                            onClick={() => setShowNotesModal(true)}
-                            sx={{ borderRadius: 2 }}
+                          <Button
+                            variant="outlined"
+                            startIcon={<StopIcon />}
+                            onClick={handleEndConversation}
+                            size="small"
+                            color="success"
                           >
-                            Note
+                            Resolve
                           </Button>
-                          <Button 
-                            variant="contained" 
-                            size="small" 
-                            startIcon={<PlayArrowIcon />} 
-                            onClick={handleStartConversation}
-                            sx={{ borderRadius: 2 }}
+                          <Button
+                            variant="outlined"
+                            startIcon={<WarningIcon />}
+                            onClick={handleEscalate}
+                            size="small"
+                            color="warning"
                           >
-                            Start
+                            Escalate
                           </Button>
                         </>
                       )}
                     </>
                   )}
-                  <IconButton 
-                    onClick={() => setShowContextPanel(!showContextPanel)} 
-                    sx={{ 
-                      ml: 1,
-                      bgcolor: showContextPanel ? 'primary.main' : 'transparent',
-                      color: showContextPanel ? 'white' : 'text.secondary',
-                      '&:hover': {
-                        bgcolor: showContextPanel ? 'primary.dark' : 'rgba(0,0,0,0.04)',
-                      },
-                    }}
+                  <Button
+                    variant="outlined"
+                    startIcon={<NoteIcon />}
+                    onClick={() => setShowNotesModal(true)}
+                    size="small"
                   >
-                    <PersonIcon />
-                  </IconButton>
+                    Add Note
+                  </Button>
                 </Box>
               </Box>
 
               {/* Messages */}
-              <Box sx={{ flex: 1, overflow: 'auto', p: 4 }}>
-                <Box sx={{ maxWidth: 720, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {inboxMessages.map((message) => {
-                    const isOutgoing = message.from === 'Support';
-                    return (
-                      <Box 
-                        key={message.id} 
-                        sx={{ 
-                          display: 'flex', 
-                          justifyContent: isOutgoing ? 'flex-end' : 'flex-start',
-                        }}
-                      >
+              <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+                {loading.messages ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <>
+                    {inboxMessages.map((message) => {
+                      const isOutgoing = message.from === 'Support' || message.direction === 'outbound';
+                      return (
                         <Box
-                          className={`message-bubble ${isOutgoing ? 'message-bubble-outgoing' : 'message-bubble-incoming'}`}
+                          key={message.id || message._id}
+                          className={`message-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`}
                           sx={{
-                            position: 'relative',
-                            maxWidth: '75%',
+                            maxWidth: '70%',
+                            mb: 2,
+                            ml: isOutgoing ? 'auto' : 0,
                             p: 2,
-                            px: 2.5,
                             borderRadius: 3,
-                            background: isOutgoing 
-                              ? customColors.gradients.primary
-                              : 'white',
+                            bgcolor: isOutgoing ? 'primary.main' : 'background.paper',
                             color: isOutgoing ? 'white' : 'text.primary',
                             boxShadow: isOutgoing 
-                              ? '0 4px 14px -4px rgba(99, 102, 241, 0.4)'
-                              : '0 2px 8px -2px rgba(0, 0, 0, 0.1)',
-                            border: isOutgoing ? 'none' : '1px solid rgba(0,0,0,0.06)',
-                            '&:hover .reply-btn': { opacity: 1 },
+                              ? '0 4px 12px -2px rgba(99, 102, 241, 0.3)' 
+                              : '0 2px 8px -2px rgba(0,0,0,0.1)',
                           }}
                         >
                           {message.subject && (
-                            <Typography variant="body2" fontWeight={600} mb={0.5}>
+                            <Typography variant="subtitle2" fontWeight={600} mb={1}>
                               {message.subject}
                             </Typography>
                           )}
-                          {message.type === 'template' ? (
-                            <Typography variant="body2" fontStyle="italic" sx={{ opacity: 0.9 }}>
-                              [Template: {message.template}]
-                            </Typography>
-                          ) : (
-                            <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
-                              {message.body}
-                            </Typography>
-                          )}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5, opacity: 0.7 }}>
-                            {message.source === 'whatsapp' ? (
-                              <ChatIcon sx={{ fontSize: 12 }} />
-                            ) : (
-                              <EmailIcon sx={{ fontSize: 12 }} />
-                            )}
-                            <Typography variant="caption">
-                              {format(new Date(message.created_at), 'h:mm a')}
-                            </Typography>
-                          </Box>
-                          {!isOutgoing && (
-                            <IconButton
-                              className="reply-btn"
-                              size="small"
-                              sx={{
-                                position: 'absolute',
-                                right: -44,
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                opacity: 0,
-                                transition: 'all 0.2s',
-                                bgcolor: 'background.paper',
-                                boxShadow: 1,
-                                '&:hover': { bgcolor: 'primary.light', color: 'white' },
-                              }}
-                              onClick={() => handleReplyClick(message)}
-                              disabled={!isConversationStarted}
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                            {message.body || message.text}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1 }}>
+                            <Typography 
+                              variant="caption" 
+                              sx={{ opacity: 0.7 }}
                             >
-                              <ReplyIcon fontSize="small" />
-                            </IconButton>
-                          )}
+                              {format(new Date(getMessageDate(message) || new Date()), 'MMM d, h:mm a')}
+                            </Typography>
+                            {!isOutgoing && isConversationStarted && (
+                              <IconButton
+                                size="small"
+                                onClick={() => handleReplyClick(message)}
+                                sx={{ 
+                                  color: isOutgoing ? 'white' : 'primary.main',
+                                  ml: 1,
+                                }}
+                              >
+                                <ReplyIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                          </Box>
                         </Box>
-                      </Box>
-                    );
-                  })}
-                  <div ref={messagesEndRef} />
-                </Box>
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
               </Box>
 
-              {/* Send Actions */}
-              <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-                <Box sx={{ display: 'flex', gap: 1.5, maxWidth: 720, mx: 'auto' }}>
-                  <Button 
-                    variant="outlined" 
-                    sx={{ 
-                      flex: 1, 
-                      py: 1.5,
-                      borderRadius: 3,
-                      borderWidth: 1.5,
-                    }} 
-                    startIcon={<EmailIcon sx={{ color: customColors.channel.email }} />} 
-                    onClick={() => setShowEmailModal(true)}
-                  >
-                    Send Email
-                  </Button>
-                  <Button 
-                    variant="outlined" 
-                    sx={{ 
-                      flex: 1, 
-                      py: 1.5,
-                      borderRadius: 3,
-                      borderWidth: 1.5,
-                    }} 
-                    startIcon={<ChatIcon sx={{ color: customColors.channel.whatsapp }} />} 
-                    onClick={() => setShowWhatsappModal(true)}
-                  >
-                    Send WhatsApp
-                  </Button>
-                </Box>
-              </Box>
-            </>
-          ) : (
-            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Box sx={{ textAlign: 'center' }}>
+              {/* Quick Reply Bar */}
+              {isConversationStarted && (
                 <Box
                   sx={{
-                    width: 80,
-                    height: 80,
-                    borderRadius: 4,
-                    bgcolor: 'rgba(99, 102, 241, 0.1)',
+                    borderTop: '1px solid',
+                    borderColor: 'divider',
+                    p: 2,
+                    bgcolor: 'background.paper',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    mx: 'auto',
-                    mb: 3,
+                    gap: 1.5,
                   }}
                 >
-                  <ChatIcon sx={{ fontSize: 36, color: 'primary.main' }} />
+                  {selectedInbox.source === 'whatsapp' ? (
+                    <Button
+                      variant="contained"
+                      startIcon={<ChatIcon />}
+                      onClick={() => setShowWhatsappModal(true)}
+                      sx={{ 
+                        bgcolor: customColors.channel.whatsapp,
+                        '&:hover': { bgcolor: '#1da851' },
+                      }}
+                    >
+                      Send WhatsApp Template
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="contained"
+                      startIcon={<EmailIcon />}
+                      onClick={() => setShowEmailModal(true)}
+                      sx={{ 
+                        bgcolor: customColors.channel.email,
+                        '&:hover': { bgcolor: '#2563eb' },
+                      }}
+                    >
+                      Compose Email
+                    </Button>
+                  )}
                 </Box>
-                <Typography variant="h6" fontWeight={600} mb={1}>
-                  Select a conversation
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Choose a conversation from the list to view messages
-                </Typography>
-              </Box>
+              )}
+            </>
+          ) : (
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'text.secondary',
+              }}
+            >
+              <ChatIcon sx={{ fontSize: 64, opacity: 0.2, mb: 2 }} />
+              <Typography variant="h6" fontWeight={500}>
+                Select a conversation
+              </Typography>
+              <Typography variant="body2">
+                Choose an inbox item to view the conversation
+              </Typography>
             </Box>
           )}
         </Box>
-      </Box>
 
-      {/* Context Panel */}
-      {showContextPanel && <ContextPanel inbox={selectedInbox} onClose={() => setShowContextPanel(false)} />}
+        {/* Context Panel */}
+        {showContextPanel && selectedInbox && (
+          <ContextPanel 
+            inbox={selectedInbox} 
+            onClose={() => setShowContextPanel(false)} 
+          />
+        )}
+      </Box>
 
       {/* Notes Modal */}
       <Dialog open={showNotesModal} onClose={() => setShowNotesModal(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Create Note</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
-            <TextField 
-              label="Description" 
-              placeholder="Note description..." 
-              multiline 
-              rows={3} 
-              value={noteBody} 
-              onChange={(e) => setNoteBody(e.target.value)} 
-              fullWidth 
-            />
-            <TextField 
-              label="Due Date" 
-              type="date" 
-              value={noteDueDate} 
-              onChange={(e) => setNoteDueDate(e.target.value)} 
-              fullWidth 
-              InputLabelProps={{ shrink: true }} 
-            />
-          </Box>
+          <TextField
+            label="Note"
+            fullWidth
+            multiline
+            rows={4}
+            value={noteBody}
+            onChange={(e) => setNoteBody(e.target.value)}
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Due Date"
+            type="date"
+            fullWidth
+            value={noteDueDate}
+            onChange={(e) => setNoteDueDate(e.target.value)}
+            sx={{ mt: 2 }}
+            InputLabelProps={{ shrink: true }}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowNotesModal(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleCreateNote}>Create Note</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Reply Modal */}
-      <Dialog open={showReplyModal} onClose={() => setShowReplyModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          Reply via{' '}
-          {replyMessage?.source === 'whatsapp' ? (
-            <>
-              <ChatIcon sx={{ color: customColors.channel.whatsapp }} />
-              WhatsApp
-              {!isWithin24HourWindow(selectedInbox) && (
-                <Typography variant="caption" color="text.secondary" ml={1}>(Template required)</Typography>
-              )}
-            </>
-          ) : (
-            <>
-              <EmailIcon sx={{ color: customColors.channel.email }} />
-              Email
-            </>
-          )}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
-            {replyMessage && (
-              <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'grey.50', border: '1px solid', borderColor: 'divider' }}>
-                <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                  Replying to:
-                </Typography>
-                <Typography variant="body2">{replyMessage.body}</Typography>
-              </Box>
-            )}
-            {replyMessage?.source === 'whatsapp' && !isWithin24HourWindow(selectedInbox) ? (
-              <TextField 
-                label="Template Name" 
-                placeholder="Enter template name..." 
-                value={replyTemplateName} 
-                onChange={(e) => setReplyTemplateName(e.target.value)} 
-                fullWidth 
-              />
-            ) : (
-              <TextField 
-                label="Your Reply" 
-                placeholder="Type your reply..." 
-                multiline 
-                rows={4} 
-                value={replyBody} 
-                onChange={(e) => setReplyBody(e.target.value)} 
-                fullWidth 
-              />
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowReplyModal(false)}>Cancel</Button>
-          <Button variant="contained" startIcon={<SendIcon />} onClick={handleSendReply}>
-            {replyMessage?.source === 'whatsapp' && !isWithin24HourWindow(selectedInbox) 
-              ? 'Send Template' 
-              : `Send ${replyMessage?.source === 'whatsapp' ? 'WhatsApp' : 'Email'}`}
+          <Button 
+            variant="contained" 
+            onClick={handleCreateNote}
+            disabled={!noteBody || !noteDueDate || sending}
+            startIcon={sending && <CircularProgress size={16} />}
+          >
+            Create Note
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Query Type Modal */}
       <Dialog open={showQueryModal} onClose={() => setShowQueryModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Select Query Type</DialogTitle>
+        <DialogTitle>Resolve Conversation</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
-            <FormControl fullWidth>
-              <InputLabel>Query Type</InputLabel>
-              <Select value={selectedQueryType} onChange={(e) => setSelectedQueryType(e.target.value)} label="Query Type">
-                {queryTypes.map((qt) => (
-                  <MenuItem key={qt.id} value={qt.name}>{qt.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField 
-              label="Or add custom" 
-              placeholder="Custom query type..." 
-              value={customQueryType} 
-              onChange={(e) => setCustomQueryType(e.target.value)} 
-              fullWidth 
-            />
-          </Box>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Query Type</InputLabel>
+            <Select
+              value={selectedQueryType}
+              onChange={(e) => setSelectedQueryType(e.target.value)}
+              label="Query Type"
+            >
+              <MenuItem value="Technical Issue">Technical Issue</MenuItem>
+              <MenuItem value="Billing Query">Billing Query</MenuItem>
+              <MenuItem value="General Inquiry">General Inquiry</MenuItem>
+              <MenuItem value="Feature Request">Feature Request</MenuItem>
+              <MenuItem value="Bug Report">Bug Report</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField
+            label="Or enter custom query type"
+            fullWidth
+            value={customQueryType}
+            onChange={(e) => setCustomQueryType(e.target.value)}
+            sx={{ mt: 2 }}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowQueryModal(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleResolve}>Resolve</Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleResolve}
+            disabled={!selectedQueryType && !customQueryType}
+          >
+            Resolve
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Send Email Modal */}
-      <Dialog open={showEmailModal} onClose={() => setShowEmailModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <EmailIcon sx={{ color: customColors.channel.email }} />
-          Send Email
+      {/* Reply Modal */}
+      <Dialog open={showReplyModal} onClose={() => setShowReplyModal(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Reply to {replyMessage?.source === 'whatsapp' ? 'WhatsApp' : 'Email'}
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
-            <TextField 
-              label="Subject" 
-              placeholder="Email subject..." 
-              value={emailSubject} 
-              onChange={(e) => setEmailSubject(e.target.value)} 
-              fullWidth 
+          {replyMessage?.source === 'whatsapp' && !isWithin24HourWindow(selectedInbox) ? (
+            <TextField
+              label="Template Name"
+              fullWidth
+              value={replyTemplateName}
+              onChange={(e) => setReplyTemplateName(e.target.value)}
+              placeholder="e.g., t1, welcome_template"
+              helperText="24-hour window expired. You can only send templates."
+              sx={{ mt: 2 }}
             />
-            <TextField 
-              label="Message" 
-              placeholder="Type your email message..." 
-              multiline 
-              rows={5} 
-              value={emailBody} 
-              onChange={(e) => setEmailBody(e.target.value)} 
-              fullWidth 
+          ) : (
+            <TextField
+              label="Message"
+              fullWidth
+              multiline
+              rows={4}
+              value={replyBody}
+              onChange={(e) => setReplyBody(e.target.value)}
+              sx={{ mt: 2 }}
             />
-          </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowReplyModal(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
+            onClick={handleSendReply}
+            disabled={sending}
+          >
+            Send
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Email Modal */}
+      <Dialog open={showEmailModal} onClose={() => setShowEmailModal(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Compose Email</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Subject"
+            fullWidth
+            value={emailSubject}
+            onChange={(e) => setEmailSubject(e.target.value)}
+            sx={{ mt: 2 }}
+          />
+          <TextField
+            label="Body"
+            fullWidth
+            multiline
+            rows={6}
+            value={emailBody}
+            onChange={(e) => setEmailBody(e.target.value)}
+            sx={{ mt: 2 }}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowEmailModal(false)}>Cancel</Button>
-          <Button variant="contained" startIcon={<SendIcon />} onClick={handleSendEmail}>Send Email</Button>
+          <Button
+            variant="contained"
+            startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
+            onClick={handleSendEmail}
+            disabled={!emailSubject || !emailBody || sending}
+          >
+            Send Email
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Send WhatsApp Template Modal */}
+      {/* WhatsApp Modal */}
       <Dialog open={showWhatsappModal} onClose={() => setShowWhatsappModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ChatIcon sx={{ color: customColors.channel.whatsapp }} />
-          Send WhatsApp Template
-        </DialogTitle>
+        <DialogTitle>Send WhatsApp Template</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
-            <TextField 
-              label="Template Name" 
-              placeholder="Enter template name..." 
-              value={whatsappTemplateName} 
-              onChange={(e) => setWhatsappTemplateName(e.target.value)} 
-              fullWidth 
-            />
-          </Box>
+          <TextField
+            label="Template Name"
+            fullWidth
+            value={whatsappTemplateName}
+            onChange={(e) => setWhatsappTemplateName(e.target.value)}
+            placeholder="e.g., t1, welcome_template"
+            sx={{ mt: 2 }}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowWhatsappModal(false)}>Cancel</Button>
-          <Button variant="contained" startIcon={<SendIcon />} onClick={handleSendWhatsapp}>Send Template</Button>
+          <Button
+            variant="contained"
+            startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
+            onClick={handleSendWhatsapp}
+            disabled={!whatsappTemplateName || sending}
+            sx={{ 
+              bgcolor: customColors.channel.whatsapp,
+              '&:hover': { bgcolor: '#1da851' },
+            }}
+          >
+            Send Template
+          </Button>
         </DialogActions>
       </Dialog>
     </MainLayout>
