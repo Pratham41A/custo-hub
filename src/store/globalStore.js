@@ -253,33 +253,35 @@ export const useGlobalStore = create((set, get) => ({
   getDashboardStats: () => {
     const { inboxes, dashboardData } = get();
     
-    // If we have API dashboard data, use it
+    // If we have API dashboard data, use the new format
     if (dashboardData) {
-      return dashboardData;
+      const { statusSummary = {}, categoryResolvedSummary = [], channelResolvedSummary = [] } = dashboardData;
+      return {
+        // Status counts from statusSummary
+        unread: statusSummary.unread || 0,
+        read: statusSummary.read || 0,
+        started: statusSummary.started || 0,
+        resolved: statusSummary.resolved || 0,
+        ended: statusSummary.ended || 0,
+        pending: statusSummary.pending || 0,
+        // Category summary - array of { _id, count }
+        categoryResolvedSummary,
+        // Channel summary - array of { _id, count }
+        channelResolvedSummary,
+      };
     }
     
     // Fallback to calculating from inboxes
-    const stats = {
-      read: inboxes.filter((i) => i.status === 'read').length,
+    return {
       unread: inboxes.filter((i) => i.status === 'unread').length,
+      read: inboxes.filter((i) => i.status === 'read').length,
+      started: inboxes.filter((i) => i.status === 'started').length,
       resolved: inboxes.filter((i) => i.status === 'resolved').length,
+      ended: inboxes.filter((i) => i.status === 'ended').length,
       pending: inboxes.filter((i) => i.status === 'pending').length,
-      escalated: inboxes.filter((i) => i.status === 'escalated').length,
-      queryTypeStats: {},
-      whatsappResolved: inboxes.filter((i) => i.status === 'resolved' && i.source === 'whatsapp').length,
-      emailResolved: inboxes.filter((i) => i.status === 'resolved' && i.source === 'email').length,
+      categoryResolvedSummary: [],
+      channelResolvedSummary: [],
     };
-    
-    inboxes
-      .filter((i) => i.status === 'resolved')
-      .forEach((inbox) => {
-        const queryTypes = inbox.query_types || [];
-        queryTypes.forEach((qt) => {
-          stats.queryTypeStats[qt] = (stats.queryTypeStats[qt] || 0) + 1;
-        });
-      });
-    
-    return stats;
   },
   
   // Socket Event Handlers

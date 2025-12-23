@@ -95,20 +95,25 @@ export default function Dashboard() {
 
   const statCards = [
     { 
-      label: 'Read', 
-      value: stats.read || 0, 
-      icon: VisibilityIcon, 
-      color: customColors.stat.read,
-      gradient: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
-      bgClass: 'stat-card-blue',
-    },
-    { 
       label: 'Unread', 
       value: stats.unread || 0, 
       icon: VisibilityOffIcon, 
       color: customColors.stat.unread,
       gradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-      bgClass: 'stat-card-amber',
+    },
+    { 
+      label: 'Read', 
+      value: stats.read || 0, 
+      icon: VisibilityIcon, 
+      color: customColors.stat.read,
+      gradient: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
+    },
+    { 
+      label: 'Started', 
+      value: stats.started || 0, 
+      icon: AccessTimeIcon, 
+      color: customColors.stat.pending,
+      gradient: 'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)',
     },
     { 
       label: 'Resolved', 
@@ -116,23 +121,20 @@ export default function Dashboard() {
       icon: CheckCircleIcon, 
       color: customColors.stat.resolved,
       gradient: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
-      bgClass: 'stat-card-emerald',
+    },
+    { 
+      label: 'Ended', 
+      value: stats.ended || 0, 
+      icon: WarningIcon, 
+      color: '#64748b',
+      gradient: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
     },
     { 
       label: 'Pending', 
       value: stats.pending || 0, 
-      icon: AccessTimeIcon, 
-      color: customColors.stat.pending,
-      gradient: 'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)',
-      bgClass: 'stat-card-violet',
-    },
-    { 
-      label: 'Escalated', 
-      value: stats.escalated || 0, 
       icon: WarningIcon, 
       color: customColors.stat.escalated,
       gradient: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-      bgClass: 'stat-card-red',
     },
   ];
 
@@ -354,21 +356,21 @@ export default function Dashboard() {
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                    {Object.entries(stats.queryTypeStats || {}).map(([name, count], index) => {
-                      const maxCount = Math.max(...Object.values(stats.queryTypeStats || {}), 1);
-                      const percentage = (count / maxCount) * 100;
+                    {(stats.categoryResolvedSummary || []).map((category) => {
+                      const maxCount = Math.max(...(stats.categoryResolvedSummary || []).map(c => c.count), 1);
+                      const percentage = (category.count / maxCount) * 100;
                       return (
-                        <Box key={name}>
+                        <Box key={category._id}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                             <Typography variant="body2" fontWeight={500}>
-                              {name}
+                              {category._id}
                             </Typography>
                             <Typography 
                               variant="body2" 
                               fontWeight={700}
                               sx={{ color: 'primary.main' }}
                             >
-                              {count}
+                              {category.count}
                             </Typography>
                           </Box>
                           <LinearProgress 
@@ -386,7 +388,7 @@ export default function Dashboard() {
                         </Box>
                       );
                     })}
-                    {Object.keys(stats.queryTypeStats || {}).length === 0 && (
+                    {(stats.categoryResolvedSummary || []).length === 0 && (
                       <Box sx={{ textAlign: 'center', py: 4 }}>
                         <Typography variant="body2" color="text.secondary">
                           No resolved queries yet
@@ -411,98 +413,71 @@ export default function Dashboard() {
                     </Typography>
                   </Box>
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <Box
-                        sx={{
-                          borderRadius: 4,
-                          p: 3,
-                          background: `linear-gradient(135deg, ${customColors.channel.whatsapp}12, ${customColors.channel.whatsapp}05)`,
-                          border: `1px solid ${customColors.channel.whatsapp}25`,
-                          transition: 'all 0.3s',
-                          '&:hover': {
-                            transform: 'translateY(-2px)',
-                            boxShadow: `0 12px 24px -8px ${customColors.channel.whatsapp}30`,
-                          },
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                    {(stats.channelResolvedSummary || []).map((channel) => {
+                      const channelColors = {
+                        whatsapp: { bg: customColors.channel.whatsapp, icon: ChatIcon },
+                        email: { bg: customColors.channel.email, icon: EmailIcon },
+                        web: { bg: '#6366f1', icon: TrendingUpIcon },
+                      };
+                      const config = channelColors[channel._id?.toLowerCase()] || channelColors.email;
+                      const Icon = config.icon;
+                      return (
+                        <Grid item xs={6} md={4} key={channel._id}>
                           <Box
                             sx={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 2.5,
-                              background: `linear-gradient(135deg, ${customColors.channel.whatsapp}, #22c55e)`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              boxShadow: `0 8px 16px -4px ${customColors.channel.whatsapp}50`,
+                              borderRadius: 4,
+                              p: 3,
+                              background: `linear-gradient(135deg, ${config.bg}12, ${config.bg}05)`,
+                              border: `1px solid ${config.bg}25`,
+                              transition: 'all 0.3s',
+                              '&:hover': {
+                                transform: 'translateY(-2px)',
+                                boxShadow: `0 12px 24px -8px ${config.bg}30`,
+                              },
                             }}
                           >
-                            <ChatIcon sx={{ color: 'white', fontSize: 22 }} />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                              <Box
+                                sx={{
+                                  width: 44,
+                                  height: 44,
+                                  borderRadius: 2.5,
+                                  background: `linear-gradient(135deg, ${config.bg}, ${config.bg}cc)`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  boxShadow: `0 8px 16px -4px ${config.bg}50`,
+                                }}
+                              >
+                                <Icon sx={{ color: 'white', fontSize: 22 }} />
+                              </Box>
+                              <Typography fontWeight={600} sx={{ textTransform: 'capitalize' }}>
+                                {channel._id}
+                              </Typography>
+                            </Box>
+                            <Typography 
+                              variant="h2" 
+                              fontWeight={800}
+                              sx={{ color: config.bg, lineHeight: 1 }}
+                            >
+                              {channel.count}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mt={1}>
+                              Resolved
+                            </Typography>
                           </Box>
-                          <Typography fontWeight={600}>WhatsApp</Typography>
+                        </Grid>
+                      );
+                    })}
+                    {(stats.channelResolvedSummary || []).length === 0 && (
+                      <Grid item xs={12}>
+                        <Box sx={{ textAlign: 'center', py: 4 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            No channel data available
+                          </Typography>
                         </Box>
-                        <Typography 
-                          variant="h2" 
-                          fontWeight={800}
-                          sx={{ 
-                            color: customColors.channel.whatsapp,
-                            lineHeight: 1,
-                          }}
-                        >
-                          {stats.whatsappResolved || 0}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" mt={1}>
-                          Resolved conversations
-                        </Typography>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Box
-                        sx={{
-                          borderRadius: 4,
-                          p: 3,
-                          background: `linear-gradient(135deg, ${customColors.channel.email}12, ${customColors.channel.email}05)`,
-                          border: `1px solid ${customColors.channel.email}25`,
-                          transition: 'all 0.3s',
-                          '&:hover': {
-                            transform: 'translateY(-2px)',
-                            boxShadow: `0 12px 24px -8px ${customColors.channel.email}30`,
-                          },
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                          <Box
-                            sx={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 2.5,
-                              background: `linear-gradient(135deg, ${customColors.channel.email}, #60a5fa)`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              boxShadow: `0 8px 16px -4px ${customColors.channel.email}50`,
-                            }}
-                          >
-                            <EmailIcon sx={{ color: 'white', fontSize: 22 }} />
-                          </Box>
-                          <Typography fontWeight={600}>Email</Typography>
-                        </Box>
-                        <Typography 
-                          variant="h2" 
-                          fontWeight={800}
-                          sx={{ 
-                            color: customColors.channel.email,
-                            lineHeight: 1,
-                          }}
-                        >
-                          {stats.emailResolved || 0}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" mt={1}>
-                          Resolved conversations
-                        </Typography>
-                      </Box>
-                    </Grid>
+                      </Grid>
+                    )}
                   </Grid>
                 </CardContent>
               </Card>
