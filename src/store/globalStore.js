@@ -1,16 +1,14 @@
 import { create } from 'zustand';
-import { apiService } from '@/services/apiService';
+import { apiService } from '../services/apiService';
 
 export const useGlobalStore = create((set, get) => ({
   // Data
-  users: [],
   subscriptions: [],
   payments: [],
   inboxes: [],
   messages: [],
   views: [],
   notes: [],
-  queryTypes: [],
   dashboardData: null,
   
   // Loading states
@@ -23,7 +21,6 @@ export const useGlobalStore = create((set, get) => ({
   
   // UI State
   selectedInbox: null,
-  selectedUser: null,
   activeFilter: 'all',
   dateRange: { start: null, end: null },
   pagination: { skip: 0, limit: 20 },
@@ -34,18 +31,15 @@ export const useGlobalStore = create((set, get) => ({
   })),
   
   // Setters
-  setUsers: (users) => set({ users }),
   setSubscriptions: (subscriptions) => set({ subscriptions }),
   setPayments: (payments) => set({ payments }),
   setInboxes: (inboxes) => set({ inboxes }),
   setMessages: (messages) => set({ messages }),
   setViews: (views) => set({ views }),
   setNotes: (notes) => set({ notes }),
-  setQueryTypes: (queryTypes) => set({ queryTypes }),
   setDashboardData: (dashboardData) => set({ dashboardData }),
   
   setSelectedInbox: (inbox) => set({ selectedInbox: inbox }),
-  setSelectedUser: (user) => set({ selectedUser: user }),
   setActiveFilter: (filter) => set({ activeFilter: filter }),
   setDateRange: (range) => set({ dateRange: range }),
   setPagination: (pagination) => set({ pagination }),
@@ -116,12 +110,12 @@ export const useGlobalStore = create((set, get) => ({
       });
       set((state) => ({
         inboxes: state.inboxes.map((inbox) =>
-          inbox.id === inboxId || inbox._id === inboxId 
-            ? { ...inbox, status, updated_at: new Date().toISOString() } 
+          inbox._id === inboxId 
+            ? { ...inbox, status, updatedAt: new Date().toISOString() } 
             : inbox
         ),
-        selectedInbox: (state.selectedInbox?.id === inboxId || state.selectedInbox?._id === inboxId)
-          ? { ...state.selectedInbox, status, updated_at: new Date().toISOString() }
+        selectedInbox: state.selectedInbox?._id === inboxId
+          ? { ...state.selectedInbox, status, updatedAt: new Date().toISOString() }
           : state.selectedInbox,
       }));
       return true;
@@ -131,60 +125,59 @@ export const useGlobalStore = create((set, get) => ({
     }
   },
 
-  // User data fetching
+  // User data fetching - matches API response format
   fetchUserSubscriptions: async (userid, limit = 10) => {
     try {
-      const data = await apiService.getSubscriptions(userid, limit);
-      const subs = data.subscriptions || data.data || data || [];
+      const response = await apiService.getSubscriptions(userid, limit);
+      const subs = response.data || [];
       set({ subscriptions: subs });
-      return subs;
+      return { data: subs, pagination: response.pagination };
     } catch (error) {
       console.error('Failed to fetch subscriptions:', error);
-      return [];
+      return { data: [], pagination: null };
     }
   },
 
   fetchUserPayments: async (userid, limit = 10) => {
     try {
-      const data = await apiService.getPayments(userid, limit);
-      const payments = data.payments || data.data || data || [];
+      const response = await apiService.getPayments(userid, limit);
+      const payments = response.data || [];
       set({ payments });
-      return payments;
+      return { data: payments, pagination: response.pagination };
     } catch (error) {
       console.error('Failed to fetch payments:', error);
-      return [];
+      return { data: [], pagination: null };
     }
   },
 
   fetchUserViews: async (userid, limit = 10) => {
     try {
-      const data = await apiService.getViews(userid, limit);
-      const views = data.views || data.data || data || [];
+      const response = await apiService.getViews(userid, limit);
+      const views = response.data || [];
       set({ views });
-      return views;
+      return { data: views, pagination: response.pagination };
     } catch (error) {
       console.error('Failed to fetch views:', error);
-      return [];
+      return { data: [], pagination: null };
     }
   },
 
   fetchUserActivities: async (userid, limit = 10) => {
     try {
-      const data = await apiService.getActivities(userid, limit);
-      const notes = data.activities || data.data || data || [];
+      const response = await apiService.getActivities(userid, limit);
+      const notes = response.data || [];
       set({ notes });
-      return notes;
+      return { data: notes, pagination: response.pagination };
     } catch (error) {
       console.error('Failed to fetch activities:', error);
-      return [];
+      return { data: [], pagination: null };
     }
   },
 
   // Message Operations
   sendWhatsappTemplate: async (mobile, template) => {
     try {
-      const result = await apiService.sendWhatsappTemplate(mobile, template);
-      return result;
+      return await apiService.sendWhatsappTemplate(mobile, template);
     } catch (error) {
       console.error('Failed to send WhatsApp template:', error);
       throw error;
@@ -193,8 +186,7 @@ export const useGlobalStore = create((set, get) => ({
 
   sendWhatsappMessage: async (mobile, body) => {
     try {
-      const result = await apiService.sendWhatsappMessage(mobile, body);
-      return result;
+      return await apiService.sendWhatsappMessage(mobile, body);
     } catch (error) {
       console.error('Failed to send WhatsApp message:', error);
       throw error;
@@ -203,8 +195,7 @@ export const useGlobalStore = create((set, get) => ({
 
   sendEmailReply: async (replyMessageId, body, email) => {
     try {
-      const result = await apiService.sendEmailReply(replyMessageId, body, email);
-      return result;
+      return await apiService.sendEmailReply(replyMessageId, body, email);
     } catch (error) {
       console.error('Failed to send email reply:', error);
       throw error;
@@ -213,21 +204,19 @@ export const useGlobalStore = create((set, get) => ({
 
   sendNewEmail: async (subject, body, email) => {
     try {
-      const result = await apiService.sendNewEmail(subject, body, email);
-      return result;
+      return await apiService.sendNewEmail(subject, body, email);
     } catch (error) {
       console.error('Failed to send new email:', error);
       throw error;
     }
   },
 
-  // Note Operations
+  // Note Operations - matches API format
   createNote: async (owner, body, dueDate) => {
     try {
       const result = await apiService.createActivity(owner, body, dueDate);
-      const newNote = result.activity || result;
       set((state) => ({
-        notes: [...state.notes, newNote],
+        notes: [...state.notes, result],
       }));
       return result;
     } catch (error) {
@@ -236,49 +225,31 @@ export const useGlobalStore = create((set, get) => ({
     }
   },
   
-  // Legacy support for local operations
-  addMessage: (message) => set((state) => ({
-    messages: [...state.messages, message],
-  })),
-  
-  addNote: (note) => set((state) => ({
-    notes: [...state.notes, note],
-  })),
-
-  addInbox: (inbox) => set((state) => ({
-    inboxes: [inbox, ...state.inboxes],
-  })),
-  
-  // Dashboard Stats (calculated from API data or local data)
+  // Dashboard Stats - matches API response format
   getDashboardStats: () => {
-    const { inboxes, dashboardData } = get();
+    const { dashboardData } = get();
     
-    // If we have API dashboard data, use the new format
     if (dashboardData) {
       const { statusSummary = {}, categoryResolvedSummary = [], channelResolvedSummary = [] } = dashboardData;
       return {
-        // Status counts from statusSummary
         unread: statusSummary.unread || 0,
         read: statusSummary.read || 0,
         started: statusSummary.started || 0,
         resolved: statusSummary.resolved || 0,
         ended: statusSummary.ended || 0,
         pending: statusSummary.pending || 0,
-        // Category summary - array of { _id, count }
         categoryResolvedSummary,
-        // Channel summary - array of { _id, count }
         channelResolvedSummary,
       };
     }
     
-    // Fallback to calculating from inboxes
     return {
-      unread: inboxes.filter((i) => i.status === 'unread').length,
-      read: inboxes.filter((i) => i.status === 'read').length,
-      started: inboxes.filter((i) => i.status === 'started').length,
-      resolved: inboxes.filter((i) => i.status === 'resolved').length,
-      ended: inboxes.filter((i) => i.status === 'ended').length,
-      pending: inboxes.filter((i) => i.status === 'pending').length,
+      unread: 0,
+      read: 0,
+      started: 0,
+      resolved: 0,
+      ended: 0,
+      pending: 0,
       categoryResolvedSummary: [],
       channelResolvedSummary: [],
     };
@@ -286,12 +257,8 @@ export const useGlobalStore = create((set, get) => ({
   
   // Socket Event Handlers
   handleInboxUpdated: (inbox) => set((state) => ({
-    inboxes: state.inboxes.map((i) => 
-      (i.id === inbox.id || i._id === inbox._id) ? inbox : i
-    ),
-    selectedInbox: (state.selectedInbox?.id === inbox.id || state.selectedInbox?._id === inbox._id) 
-      ? inbox 
-      : state.selectedInbox,
+    inboxes: state.inboxes.map((i) => i._id === inbox._id ? inbox : i),
+    selectedInbox: state.selectedInbox?._id === inbox._id ? inbox : state.selectedInbox,
   })),
   
   handleInboxCreated: (inbox) => set((state) => ({

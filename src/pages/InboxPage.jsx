@@ -1,109 +1,63 @@
 import { useState, useEffect, useRef } from 'react';
-import { useGlobalStore } from '@/store/globalStore';
-import { MainLayout } from '@/components/layout/MainLayout';
-import { ContextPanel } from '@/components/layout/ContextPanel';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Avatar from '@mui/material/Avatar';
-import CircularProgress from '@mui/material/CircularProgress';
-import Skeleton from '@mui/material/Skeleton';
-import ChatIcon from '@mui/icons-material/Chat';
-import EmailIcon from '@mui/icons-material/Email';
-import SendIcon from '@mui/icons-material/Send';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
-import WarningIcon from '@mui/icons-material/Warning';
-import NoteIcon from '@mui/icons-material/Note';
-import ReplyIcon from '@mui/icons-material/Reply';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import { format } from 'date-fns';
-import { useSnackbar } from 'notistack';
-import { customColors } from '@/theme/theme';
+import { useGlobalStore } from '../store/globalStore';
+import { MainLayout } from '../components/layout/MainLayout';
+import { ContextPanel } from '../components/layout/ContextPanel';
+
+const formatDate = (date) => {
+  if (!date) return '';
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
 
 const statusFilters = [
   { value: 'all', label: 'All' },
   { value: 'unread', label: 'Unread' },
   { value: 'read', label: 'Read' },
-  { value: 'pending', label: 'Pending' },
+  { value: 'started', label: 'Started' },
   { value: 'resolved', label: 'Resolved' },
-  { value: 'escalated', label: 'Escalated' },
+  { value: 'pending', label: 'Pending' },
 ];
 
 export default function InboxPage() {
   const {
-    inboxes,
-    messages,
-    selectedInbox,
-    setSelectedInbox,
-    updateInboxStatus,
-    activeFilter,
-    setActiveFilter,
-    loading,
-    fetchInboxes,
-    fetchMessages,
-    sendWhatsappTemplate,
-    sendWhatsappMessage,
-    sendEmailReply,
-    sendNewEmail,
-    createNote,
+    inboxes, messages, selectedInbox, setSelectedInbox, updateInboxStatus,
+    activeFilter, setActiveFilter, loading, fetchInboxes, fetchMessages,
+    sendWhatsappTemplate, sendWhatsappMessage, sendEmailReply, sendNewEmail, createNote,
   } = useGlobalStore();
 
-  const { enqueueSnackbar } = useSnackbar();
-
   const [showContextPanel, setShowContextPanel] = useState(false);
-  const [showNotesModal, setShowNotesModal] = useState(false);
-  const [showQueryModal, setShowQueryModal] = useState(false);
-  const [showReplyModal, setShowReplyModal] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [showWhatsappModal, setShowWhatsappModal] = useState(false);
-  const [replyMessage, setReplyMessage] = useState(null);
-  const [replyBody, setReplyBody] = useState('');
-  const [replyTemplateName, setReplyTemplateName] = useState('');
-  const [noteBody, setNoteBody] = useState('');
-  const [noteDueDate, setNoteDueDate] = useState('');
-  const [selectedQueryType, setSelectedQueryType] = useState('');
-  const [customQueryType, setCustomQueryType] = useState('');
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailBody, setEmailBody] = useState('');
-  const [whatsappTemplateName, setWhatsappTemplateName] = useState('');
+  const [modal, setModal] = useState({ type: null, data: {} });
+  const [toast, setToast] = useState({ text: '', type: '' });
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
 
-  useEffect(() => {
-    loadInboxes();
-  }, [activeFilter]);
+  useEffect(() => { loadInboxes(); }, [activeFilter]);
 
   const loadInboxes = async () => {
     try {
       await fetchInboxes({ status: activeFilter === 'all' ? '' : activeFilter });
-    } catch (error) {
-      enqueueSnackbar('Failed to load inboxes', { variant: 'error' });
+    } catch {
+      showToast('Failed to load inboxes', 'error');
     }
   };
 
+  const showToast = (text, type) => {
+    setToast({ text, type });
+    setTimeout(() => setToast({ text: '', type: '' }), 3000);
+  };
+
+  const closeModal = () => setModal({ type: null, data: {} });
+
   const filteredInboxes = inboxes
-    .filter((inbox) => activeFilter === 'all' || inbox.status === activeFilter)
+    .filter((i) => activeFilter === 'all' || i.status === activeFilter)
     .sort((a, b) => {
       if (a.status === 'unread' && b.status !== 'unread') return -1;
       if (a.status !== 'unread' && b.status === 'unread') return 1;
-      return new Date(b.updated_at || b.updatedAt).getTime() - new Date(a.updated_at || a.updatedAt).getTime();
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
 
   const inboxMessages = messages
-    .filter((m) => m.inbox_id === selectedInbox?.id || m.inbox_id === selectedInbox?._id || m.inboxId === selectedInbox?.id)
-    .sort((a, b) => new Date(a.created_at || a.createdAt).getTime() - new Date(b.created_at || b.createdAt).getTime());
+    .filter((m) => m.inboxId === selectedInbox?._id)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -112,769 +66,375 @@ export default function InboxPage() {
   const handleInboxClick = async (inbox) => {
     setSelectedInbox(inbox);
     setShowContextPanel(true);
-    
     try {
-      await fetchMessages(inbox.id || inbox._id);
+      await fetchMessages(inbox._id);
       if (inbox.status === 'unread') {
-        await updateInboxStatus(inbox.id || inbox._id, 'read');
-        enqueueSnackbar('Marked as read', { variant: 'info' });
+        await updateInboxStatus(inbox._id, 'read');
+        showToast('Marked as read', 'info');
       }
-    } catch (error) {
-      enqueueSnackbar('Failed to load messages', { variant: 'error' });
+    } catch {
+      showToast('Failed to load messages', 'error');
     }
   };
 
-  const handleStartConversation = async () => {
-    if (selectedInbox) {
-      try {
-        await updateInboxStatus(selectedInbox.id || selectedInbox._id, 'started');
-        enqueueSnackbar('Conversation started', { variant: 'success' });
-      } catch (error) {
-        enqueueSnackbar('Failed to start conversation', { variant: 'error' });
-      }
-    }
-  };
-
-  const handleEndConversation = () => {
-    setShowQueryModal(true);
+  const handleStart = async () => {
+    if (!selectedInbox) return;
+    try {
+      await updateInboxStatus(selectedInbox._id, 'started');
+      showToast('Conversation started', 'success');
+    } catch { showToast('Failed to start', 'error'); }
   };
 
   const handleResolve = async () => {
-    const queryType = customQueryType || selectedQueryType;
-    if (selectedInbox && queryType) {
-      try {
-        await updateInboxStatus(selectedInbox.id || selectedInbox._id, 'resolved', queryType);
-        enqueueSnackbar(`Resolved - Query type: ${queryType}`, { variant: 'success' });
-        setShowQueryModal(false);
-        setSelectedQueryType('');
-        setCustomQueryType('');
-      } catch (error) {
-        enqueueSnackbar('Failed to resolve conversation', { variant: 'error' });
-      }
-    }
-  };
-
-  const handleEscalate = async () => {
-    if (selectedInbox) {
-      try {
-        await updateInboxStatus(selectedInbox.id || selectedInbox._id, 'escalated');
-        enqueueSnackbar('Conversation escalated', { variant: 'warning' });
-      } catch (error) {
-        enqueueSnackbar('Failed to escalate conversation', { variant: 'error' });
-      }
-    }
+    const queryType = modal.data.customQuery || modal.data.queryType;
+    if (!selectedInbox || !queryType) return;
+    try {
+      await updateInboxStatus(selectedInbox._id, 'resolved', queryType);
+      showToast(`Resolved - ${queryType}`, 'success');
+      closeModal();
+    } catch { showToast('Failed to resolve', 'error'); }
   };
 
   const handleSendEmail = async () => {
-    if (selectedInbox && emailSubject.trim() && emailBody.trim()) {
-      setSending(true);
-      try {
-        await sendNewEmail(emailSubject, emailBody, selectedInbox.user?.email);
-        enqueueSnackbar(`Email sent to ${selectedInbox.user?.email}`, { variant: 'success' });
-        setShowEmailModal(false);
-        setEmailSubject('');
-        setEmailBody('');
-        // Refresh messages
-        await fetchMessages(selectedInbox.id || selectedInbox._id);
-      } catch (error) {
-        enqueueSnackbar('Failed to send email', { variant: 'error' });
-      } finally {
-        setSending(false);
-      }
-    }
+    if (!selectedInbox || !modal.data.subject || !modal.data.body) return;
+    setSending(true);
+    try {
+      await sendNewEmail(modal.data.subject, modal.data.body, selectedInbox.owner?.email);
+      showToast('Email sent', 'success');
+      closeModal();
+      await fetchMessages(selectedInbox._id);
+    } catch { showToast('Failed to send email', 'error'); }
+    finally { setSending(false); }
   };
 
-  const handleSendWhatsapp = async () => {
-    if (selectedInbox && whatsappTemplateName.trim()) {
-      setSending(true);
-      try {
-        await sendWhatsappTemplate(selectedInbox.user?.mobile, whatsappTemplateName);
-        enqueueSnackbar(`WhatsApp template sent to ${selectedInbox.user?.mobile}`, { variant: 'success' });
-        setShowWhatsappModal(false);
-        setWhatsappTemplateName('');
-        await fetchMessages(selectedInbox.id || selectedInbox._id);
-      } catch (error) {
-        enqueueSnackbar('Failed to send WhatsApp template', { variant: 'error' });
-      } finally {
-        setSending(false);
+  const handleSendWhatsApp = async () => {
+    if (!selectedInbox || !modal.data.template) return;
+    setSending(true);
+    try {
+      await sendWhatsappTemplate(selectedInbox.owner?.mobile, modal.data.template);
+      showToast('WhatsApp template sent', 'success');
+      closeModal();
+      await fetchMessages(selectedInbox._id);
+    } catch { showToast('Failed to send WhatsApp', 'error'); }
+    finally { setSending(false); }
+  };
+
+  const handleReply = async () => {
+    if (!selectedInbox) return;
+    setSending(true);
+    try {
+      const msg = modal.data.replyMessage;
+      const isWhatsApp = msg?.source === 'whatsapp';
+      if (isWhatsApp && modal.data.template) {
+        await sendWhatsappTemplate(selectedInbox.owner?.mobile, modal.data.template);
+      } else if (isWhatsApp && modal.data.body) {
+        await sendWhatsappMessage(selectedInbox.owner?.mobile, modal.data.body);
+      } else if (modal.data.body) {
+        await sendEmailReply(msg?.messageId, modal.data.body, selectedInbox.owner?.email);
       }
-    }
+      showToast('Reply sent', 'success');
+      closeModal();
+      await fetchMessages(selectedInbox._id);
+    } catch { showToast('Failed to send reply', 'error'); }
+    finally { setSending(false); }
   };
 
   const handleCreateNote = async () => {
-    if (selectedInbox && noteBody && noteDueDate) {
-      setSending(true);
-      try {
-        await createNote(selectedInbox.user?.id || selectedInbox.user?._id, noteBody, noteDueDate);
-        setShowNotesModal(false);
-        setNoteBody('');
-        setNoteDueDate('');
-        enqueueSnackbar('Note created', { variant: 'success' });
-      } catch (error) {
-        enqueueSnackbar('Failed to create note', { variant: 'error' });
-      } finally {
-        setSending(false);
-      }
-    }
-  };
-
-  const handleReplyClick = (message) => {
-    setReplyMessage(message);
-    setReplyBody('');
-    setReplyTemplateName('');
-    setShowReplyModal(true);
-  };
-
-  const isWithin24HourWindow = (inbox) => {
-    if (!inbox || !inbox.whatsapp24HourWindowStartDateTime) return false;
-    const windowStart = new Date(inbox.whatsapp24HourWindowStartDateTime);
-    const now = new Date();
-    const hoursDiff = (now.getTime() - windowStart.getTime()) / (1000 * 60 * 60);
-    return hoursDiff < 24;
-  };
-
-  const handleSendReply = async () => {
-    if (!selectedInbox || !replyMessage) return;
-
-    const isWhatsApp = replyMessage.source === 'whatsapp';
-    const within24Hours = isWithin24HourWindow(selectedInbox);
-
+    if (!selectedInbox || !modal.data.noteBody || !modal.data.noteDueDate) return;
     setSending(true);
     try {
-      if (isWhatsApp && !within24Hours) {
-        if (!replyTemplateName.trim()) return;
-        await sendWhatsappTemplate(selectedInbox.user?.mobile, replyTemplateName);
-        enqueueSnackbar('WhatsApp template reply sent', { variant: 'success' });
-      } else if (isWhatsApp) {
-        if (!replyBody.trim()) return;
-        await sendWhatsappMessage(selectedInbox.user?.mobile, replyBody);
-        enqueueSnackbar('WhatsApp message sent', { variant: 'success' });
-      } else {
-        if (!replyBody.trim()) return;
-        await sendEmailReply(replyMessage.messageId, replyBody, selectedInbox.user?.email);
-        enqueueSnackbar('Email reply sent', { variant: 'success' });
-      }
-      
-      await fetchMessages(selectedInbox.id || selectedInbox._id);
-    } catch (error) {
-      enqueueSnackbar('Failed to send reply', { variant: 'error' });
-    } finally {
-      setSending(false);
-      setShowReplyModal(false);
-      setReplyMessage(null);
-      setReplyBody('');
-      setReplyTemplateName('');
-    }
+      await createNote(selectedInbox.owner?._id, modal.data.noteBody, modal.data.noteDueDate);
+      showToast('Note created', 'success');
+      closeModal();
+    } catch { showToast('Failed to create note', 'error'); }
+    finally { setSending(false); }
   };
 
-  const getStatusChip = (status) => {
-    const styles = {
-      read: { bgcolor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' },
-      unread: { bgcolor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' },
-      started: { bgcolor: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' },
-      resolved: { bgcolor: 'rgba(16, 185, 129, 0.1)', color: '#10b981' },
-      pending: { bgcolor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' },
-      escalated: { bgcolor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' },
-    };
-    const style = styles[status] || styles.read;
-    return (
-      <Chip
-        label={status}
-        size="small"
-        sx={{ 
-          ...style, 
-          fontWeight: 600, 
-          textTransform: 'capitalize',
-          fontSize: '0.7rem',
-          height: 22,
-        }}
-      />
-    );
-  };
-
+  const getUser = (inbox) => inbox?.owner || {};
   const canShowActions = selectedInbox && selectedInbox.status !== 'resolved';
-  const isConversationStarted =
-    selectedInbox && (selectedInbox.status === 'started' || selectedInbox.status === 'pending' || selectedInbox.status === 'escalated');
+  const isStarted = selectedInbox && ['started', 'pending'].includes(selectedInbox.status);
 
-  const getInboxUser = (inbox) => inbox.user || {};
-  const getMessageDate = (msg) => msg.created_at || msg.createdAt;
+  const getStatusColor = (status) => {
+    const colors = { unread: '#f59e0b', read: '#3b82f6', started: '#8b5cf6', resolved: '#10b981', pending: '#ef4444' };
+    return colors[status] || '#64748b';
+  };
+
+  // Styles
+  const containerStyle = { display: 'flex', height: '100vh', marginRight: showContextPanel ? '340px' : 0, transition: 'margin-right 0.3s' };
+  const listPanelStyle = { width: '360px', borderRight: '1px solid rgba(0,0,0,0.08)', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px -12px rgba(0,0,0,0.1)' };
+  const listHeaderStyle = { padding: '24px', borderBottom: '1px solid rgba(0,0,0,0.08)' };
+  const filterBtnStyle = (active) => ({ padding: '6px 12px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', border: 'none', background: active ? '#6366f1' : 'rgba(0,0,0,0.04)', color: active ? '#fff' : '#374151', cursor: 'pointer', transition: 'all 0.2s' });
+  const inboxItemStyle = (isSelected, isUnread) => ({ padding: '16px', marginBottom: '8px', borderRadius: '12px', cursor: 'pointer', border: isSelected ? '1px solid #6366f1' : '1px solid transparent', background: isSelected ? 'rgba(99, 102, 241, 0.06)' : isUnread ? 'rgba(245, 158, 11, 0.04)' : '#fff', transition: 'all 0.2s' });
+  const avatarStyle = (color) => ({ width: '44px', height: '44px', borderRadius: '12px', background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '14px' });
+  const chipStyle = (color) => ({ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: `${color}15`, color, textTransform: 'capitalize' });
+  const messagePanelStyle = { flex: 1, display: 'flex', flexDirection: 'column', background: '#fafbfc' };
+  const threadHeaderStyle = { height: '72px', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
+  const buttonStyle = (bg, color) => ({ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: bg === 'transparent' ? '1px solid rgba(0,0,0,0.15)' : 'none', background: bg, color, cursor: 'pointer', transition: 'all 0.2s' });
+  const messageStyle = (isOutgoing) => ({ maxWidth: '70%', marginBottom: '16px', marginLeft: isOutgoing ? 'auto' : 0, padding: '16px', borderRadius: '16px', background: isOutgoing ? '#6366f1' : '#fff', color: isOutgoing ? '#fff' : '#0f172a', boxShadow: isOutgoing ? '0 4px 12px rgba(99, 102, 241, 0.3)' : '0 2px 8px rgba(0,0,0,0.08)' });
+  const modalOverlayStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 };
+  const modalStyle = { background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', overflow: 'hidden' };
+  const modalHeaderStyle = { padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.08)', fontSize: '18px', fontWeight: 600 };
+  const modalBodyStyle = { padding: '24px' };
+  const modalFooterStyle = { padding: '16px 24px', borderTop: '1px solid rgba(0,0,0,0.08)', display: 'flex', justifyContent: 'flex-end', gap: '12px' };
+  const inputStyle = { width: '100%', padding: '12px 16px', border: '1px solid rgba(0,0,0,0.12)', borderRadius: '10px', fontSize: '14px', marginBottom: '16px' };
+  const textareaStyle = { ...inputStyle, minHeight: '120px', resize: 'vertical' };
+  const selectStyle = { ...inputStyle, cursor: 'pointer' };
+  const toastStyle = { position: 'fixed', bottom: '24px', right: '24px', padding: '12px 20px', borderRadius: '10px', fontSize: '14px', fontWeight: 500, color: '#fff', background: toast.type === 'error' ? '#ef4444' : toast.type === 'success' ? '#10b981' : '#3b82f6', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', zIndex: 10000, animation: 'fadeIn 0.3s' };
 
   return (
     <MainLayout>
-      <Box 
-        sx={{ 
-          display: 'flex', 
-          height: '100vh', 
-          mr: showContextPanel ? '340px' : 0,
-          transition: 'margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-      >
+      <div style={containerStyle}>
         {/* Inbox List */}
-        <Box 
-          sx={{ 
-            width: 360, 
-            borderRight: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'background.paper', 
-            display: 'flex', 
-            flexDirection: 'column',
-            boxShadow: '4px 0 24px -12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          {/* Header & Filters */}
-          <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="h5" fontWeight={700}>
-                Inbox
-              </Typography>
-              <IconButton 
-                size="small" 
-                onClick={loadInboxes}
-                disabled={loading.inboxes}
-              >
-                {loading.inboxes ? <CircularProgress size={20} /> : <RefreshIcon />}
-              </IconButton>
-            </Box>
-            <Typography variant="body2" color="text.secondary" mb={2}>
-              {filteredInboxes.length} conversations
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-              {statusFilters.map((filter) => (
-                <Button
-                  key={filter.value}
-                  variant={activeFilter === filter.value ? 'contained' : 'text'}
-                  size="small"
-                  onClick={() => setActiveFilter(filter.value)}
-                  sx={{
-                    minWidth: 'auto',
-                    px: 1.5,
-                    py: 0.5,
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    bgcolor: activeFilter === filter.value ? undefined : 'rgba(0,0,0,0.04)',
-                    '&:hover': {
-                      bgcolor: activeFilter === filter.value ? undefined : 'rgba(0,0,0,0.08)',
-                    },
-                  }}
-                >
-                  {filter.label}
-                </Button>
+        <div style={listPanelStyle}>
+          <div style={listHeaderStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 700 }}>Inbox</h2>
+              <button style={buttonStyle('transparent', '#374151')} onClick={loadInboxes} disabled={loading.inboxes}>
+                {loading.inboxes ? <span className="spinner" /> : '🔄'}
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>{filteredInboxes.length} conversations</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {statusFilters.map((f) => (
+                <button key={f.value} style={filterBtnStyle(activeFilter === f.value)} onClick={() => setActiveFilter(f.value)}>
+                  {f.label}
+                </button>
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
 
-          {/* Inbox Items */}
-          <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
+          <div style={{ flex: 1, overflow: 'auto', padding: '12px' }}>
             {loading.inboxes ? (
-              [...Array(5)].map((_, i) => (
-                <Box key={i} sx={{ p: 2, mb: 1 }}>
-                  <Box sx={{ display: 'flex', gap: 1.5 }}>
-                    <Skeleton variant="circular" width={44} height={44} />
-                    <Box sx={{ flex: 1 }}>
-                      <Skeleton variant="text" width="60%" />
-                      <Skeleton variant="text" width="100%" />
-                      <Skeleton variant="text" width="40%" />
-                    </Box>
-                  </Box>
-                </Box>
-              ))
+              <div style={{ textAlign: 'center', padding: '40px' }}><span className="spinner" /></div>
+            ) : filteredInboxes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
+                <div style={{ fontSize: '48px', marginBottom: '12px' }}>📭</div>
+                <div>No conversations found</div>
+              </div>
             ) : (
               filteredInboxes.map((inbox) => {
-                const user = getInboxUser(inbox);
+                const user = getUser(inbox);
+                const isSelected = selectedInbox?._id === inbox._id;
+                const initials = (user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
+                const channelColor = inbox.source === 'whatsapp' ? '#25d366' : '#3b82f6';
                 return (
-                  <Box
-                    key={inbox.id || inbox._id}
-                    onClick={() => handleInboxClick(inbox)}
-                    className={`inbox-item ${(selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) ? 'active' : ''}`}
-                    sx={{
-                      p: 2,
-                      mb: 1,
-                      borderRadius: 3,
-                      cursor: 'pointer',
-                      border: '1px solid',
-                      borderColor: (selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) ? 'primary.main' : 'transparent',
-                      bgcolor: (selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) 
-                        ? 'rgba(99, 102, 241, 0.06)' 
-                        : inbox.status === 'unread' ? 'rgba(245, 158, 11, 0.04)' : 'background.paper',
-                      transition: 'all 0.2s',
-                      '&:hover': { 
-                        bgcolor: (selectedInbox?.id || selectedInbox?._id) === (inbox.id || inbox._id) 
-                          ? 'rgba(99, 102, 241, 0.08)' 
-                          : 'rgba(0,0,0,0.02)',
-                        boxShadow: '0 4px 12px -4px rgba(0,0,0,0.1)',
-                      },
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                      <Avatar
-                        sx={{ 
-                          width: 44, 
-                          height: 44, 
-                          bgcolor: inbox.source === 'whatsapp' ? `${customColors.channel.whatsapp}20` : `${customColors.channel.email}20`,
-                          color: inbox.source === 'whatsapp' ? customColors.channel.whatsapp : customColors.channel.email,
-                          fontWeight: 600,
-                          fontSize: '0.9rem',
-                        }}
-                      >
-                        {(user.name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                      </Avatar>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {inbox.source === 'whatsapp' ? (
-                              <ChatIcon sx={{ fontSize: 14, color: customColors.channel.whatsapp }} />
-                            ) : (
-                              <EmailIcon sx={{ fontSize: 14, color: customColors.channel.email }} />
-                            )}
-                            <Typography 
-                              fontWeight={inbox.status === 'unread' ? 700 : 600} 
-                              noWrap
-                              sx={{ fontSize: '0.9rem' }}
-                            >
+                  <div key={inbox._id} style={inboxItemStyle(isSelected, inbox.status === 'unread')} onClick={() => handleInboxClick(inbox)}>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <div style={avatarStyle(channelColor)}>{initials}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{inbox.source === 'whatsapp' ? '💬' : '📧'}</span>
+                            <span style={{ fontWeight: inbox.status === 'unread' ? 700 : 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {user.name || 'Unknown User'}
-                            </Typography>
-                          </Box>
-                          {getStatusChip(inbox.status)}
-                        </Box>
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary" 
-                          sx={{ 
-                            display: '-webkit-box', 
-                            WebkitLineClamp: 2, 
-                            WebkitBoxOrient: 'vertical', 
-                            overflow: 'hidden',
-                            lineHeight: 1.5,
-                            mb: 1,
-                          }}
-                        >
+                            </span>
+                          </div>
+                          <span style={chipStyle(getStatusColor(inbox.status))}>{inbox.status}</span>
+                        </div>
+                        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '8px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                           {inbox.preview || 'No preview available'}
-                        </Typography>
-                        <Typography variant="caption" color="text.disabled">
-                          {format(new Date(inbox.updated_at || inbox.updatedAt || new Date()), 'MMM d, h:mm a')}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Box>
+                        </p>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>{formatDate(inbox.updatedAt)}</span>
+                      </div>
+                    </div>
+                  </div>
                 );
               })
             )}
-            {!loading.inboxes && filteredInboxes.length === 0 && (
-              <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
-                <ChatIcon sx={{ fontSize: 48, opacity: 0.3, mb: 2 }} />
-                <Typography>No conversations found</Typography>
-              </Box>
-            )}
-          </Box>
-        </Box>
+          </div>
+        </div>
 
         {/* Message Thread */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#fafbfc' }}>
+        <div style={messagePanelStyle}>
           {selectedInbox ? (
             <>
-              {/* Thread Header */}
-              <Box
-                sx={{
-                  height: 'var(--header-height, 72px)',
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  px: 3,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  bgcolor: 'background.paper',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Avatar
-                    sx={{ 
-                      width: 48, 
-                      height: 48, 
-                      background: customColors.gradients.primary,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {(getInboxUser(selectedInbox).name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                  </Avatar>
-                  <Box>
-                    <Typography fontWeight={600} fontSize="1rem">
-                      {getInboxUser(selectedInbox).name || 'Unknown User'}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {selectedInbox.source === 'whatsapp' ? (
-                        <ChatIcon sx={{ fontSize: 14, color: customColors.channel.whatsapp }} />
-                      ) : (
-                        <EmailIcon sx={{ fontSize: 14, color: customColors.channel.email }} />
-                      )}
-                      <Typography variant="body2" color="text.secondary">
-                        {getInboxUser(selectedInbox).email || getInboxUser(selectedInbox).mobile}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  {getStatusChip(selectedInbox.status)}
+              <div style={threadHeaderStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
+                    {(getUser(selectedInbox).name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '15px' }}>{getUser(selectedInbox).name || 'Unknown User'}</div>
+                    <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {selectedInbox.source === 'whatsapp' ? '💬' : '📧'}
+                      {getUser(selectedInbox).email || getUser(selectedInbox).mobile}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={chipStyle(getStatusColor(selectedInbox.status))}>{selectedInbox.status}</span>
                   {canShowActions && (
                     <>
-                      {!isConversationStarted ? (
-                        <Button
-                          variant="contained"
-                          startIcon={<PlayArrowIcon />}
-                          onClick={handleStartConversation}
-                          size="small"
-                          sx={{ bgcolor: 'success.main' }}
-                        >
-                          Start
-                        </Button>
+                      {!isStarted ? (
+                        <button style={buttonStyle('#10b981', '#fff')} onClick={handleStart}>▶️ Start</button>
                       ) : (
-                        <>
-                          <Button
-                            variant="outlined"
-                            startIcon={<StopIcon />}
-                            onClick={handleEndConversation}
-                            size="small"
-                            color="success"
-                          >
-                            Resolve
-                          </Button>
-                          <Button
-                            variant="outlined"
-                            startIcon={<WarningIcon />}
-                            onClick={handleEscalate}
-                            size="small"
-                            color="warning"
-                          >
-                            Escalate
-                          </Button>
-                        </>
+                        <button style={buttonStyle('transparent', '#10b981')} onClick={() => setModal({ type: 'resolve', data: {} })}>✅ Resolve</button>
                       )}
                     </>
                   )}
-                  <Button
-                    variant="outlined"
-                    startIcon={<NoteIcon />}
-                    onClick={() => setShowNotesModal(true)}
-                    size="small"
-                  >
-                    Add Note
-                  </Button>
-                </Box>
-              </Box>
+                  <button style={buttonStyle('transparent', '#374151')} onClick={() => setModal({ type: 'note', data: {} })}>📝 Add Note</button>
+                </div>
+              </div>
 
-              {/* Messages */}
-              <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+              <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
                 {loading.messages ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                    <CircularProgress />
-                  </Box>
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}><span className="spinner" /></div>
                 ) : (
                   <>
-                    {inboxMessages.map((message) => {
-                      const isOutgoing = message.from === 'Support' || message.direction === 'outbound';
+                    {inboxMessages.map((msg) => {
+                      const isOutgoing = msg.from === 'Support' || msg.direction === 'outbound';
                       return (
-                        <Box
-                          key={message.id || message._id}
-                          className={`message-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`}
-                          sx={{
-                            maxWidth: '70%',
-                            mb: 2,
-                            ml: isOutgoing ? 'auto' : 0,
-                            p: 2,
-                            borderRadius: 3,
-                            bgcolor: isOutgoing ? 'primary.main' : 'background.paper',
-                            color: isOutgoing ? 'white' : 'text.primary',
-                            boxShadow: isOutgoing 
-                              ? '0 4px 12px -2px rgba(99, 102, 241, 0.3)' 
-                              : '0 2px 8px -2px rgba(0,0,0,0.1)',
-                          }}
-                        >
-                          {message.subject && (
-                            <Typography variant="subtitle2" fontWeight={600} mb={1}>
-                              {message.subject}
-                            </Typography>
-                          )}
-                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                            {message.body || message.text}
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1 }}>
-                            <Typography 
-                              variant="caption" 
-                              sx={{ opacity: 0.7 }}
-                            >
-                              {format(new Date(getMessageDate(message) || new Date()), 'MMM d, h:mm a')}
-                            </Typography>
-                            {!isOutgoing && isConversationStarted && (
-                              <IconButton
-                                size="small"
-                                onClick={() => handleReplyClick(message)}
-                                sx={{ 
-                                  color: isOutgoing ? 'white' : 'primary.main',
-                                  ml: 1,
-                                }}
+                        <div key={msg._id} style={messageStyle(isOutgoing)}>
+                          {msg.subject && <div style={{ fontWeight: 600, marginBottom: '8px' }}>{msg.subject}</div>}
+                          <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>{msg.body || msg.text}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+                            <span style={{ fontSize: '11px', opacity: 0.7 }}>{formatDate(msg.createdAt)}</span>
+                            {!isOutgoing && isStarted && (
+                              <button
+                                style={{ background: 'transparent', border: 'none', color: isOutgoing ? '#fff' : '#6366f1', cursor: 'pointer', fontSize: '16px' }}
+                                onClick={() => setModal({ type: 'reply', data: { replyMessage: msg } })}
                               >
-                                <ReplyIcon fontSize="small" />
-                              </IconButton>
+                                ↩️
+                              </button>
                             )}
-                          </Box>
-                        </Box>
+                          </div>
+                        </div>
                       );
                     })}
                     <div ref={messagesEndRef} />
                   </>
                 )}
-              </Box>
+              </div>
 
-              {/* Quick Reply Bar */}
-              {isConversationStarted && (
-                <Box
-                  sx={{
-                    borderTop: '1px solid',
-                    borderColor: 'divider',
-                    p: 2,
-                    bgcolor: 'background.paper',
-                    display: 'flex',
-                    gap: 1.5,
-                  }}
-                >
+              {isStarted && (
+                <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', padding: '16px', background: '#fff', display: 'flex', gap: '12px' }}>
                   {selectedInbox.source === 'whatsapp' ? (
-                    <Button
-                      variant="contained"
-                      startIcon={<ChatIcon />}
-                      onClick={() => setShowWhatsappModal(true)}
-                      sx={{ 
-                        bgcolor: customColors.channel.whatsapp,
-                        '&:hover': { bgcolor: '#1da851' },
-                      }}
-                    >
-                      Send WhatsApp Template
-                    </Button>
+                    <button style={buttonStyle('#25d366', '#fff')} onClick={() => setModal({ type: 'whatsapp', data: {} })}>
+                      💬 Send WhatsApp Template
+                    </button>
                   ) : (
-                    <Button
-                      variant="contained"
-                      startIcon={<EmailIcon />}
-                      onClick={() => setShowEmailModal(true)}
-                      sx={{ 
-                        bgcolor: customColors.channel.email,
-                        '&:hover': { bgcolor: '#2563eb' },
-                      }}
-                    >
-                      Compose Email
-                    </Button>
+                    <button style={buttonStyle('#3b82f6', '#fff')} onClick={() => setModal({ type: 'email', data: {} })}>
+                      📧 Compose Email
+                    </button>
                   )}
-                </Box>
+                </div>
               )}
             </>
           ) : (
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'text.secondary',
-              }}
-            >
-              <ChatIcon sx={{ fontSize: 64, opacity: 0.2, mb: 2 }} />
-              <Typography variant="h6" fontWeight={500}>
-                Select a conversation
-              </Typography>
-              <Typography variant="body2">
-                Choose an inbox item to view the conversation
-              </Typography>
-            </Box>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+              <div style={{ fontSize: '64px', marginBottom: '16px' }}>💬</div>
+              <div style={{ fontSize: '18px', fontWeight: 500 }}>Select a conversation</div>
+              <div style={{ fontSize: '14px' }}>Choose an inbox item to view the conversation</div>
+            </div>
           )}
-        </Box>
+        </div>
 
-        {/* Context Panel */}
         {showContextPanel && selectedInbox && (
-          <ContextPanel 
-            inbox={selectedInbox} 
-            onClose={() => setShowContextPanel(false)} 
-          />
+          <ContextPanel inbox={selectedInbox} onClose={() => setShowContextPanel(false)} />
         )}
-      </Box>
+      </div>
 
-      {/* Notes Modal */}
-      <Dialog open={showNotesModal} onClose={() => setShowNotesModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Note</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Note"
-            fullWidth
-            multiline
-            rows={4}
-            value={noteBody}
-            onChange={(e) => setNoteBody(e.target.value)}
-            sx={{ mt: 2 }}
-          />
-          <TextField
-            label="Due Date"
-            type="date"
-            fullWidth
-            value={noteDueDate}
-            onChange={(e) => setNoteDueDate(e.target.value)}
-            sx={{ mt: 2 }}
-            InputLabelProps={{ shrink: true }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowNotesModal(false)}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleCreateNote}
-            disabled={!noteBody || !noteDueDate || sending}
-            startIcon={sending && <CircularProgress size={16} />}
-          >
-            Create Note
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Modals */}
+      {modal.type === 'note' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>Create Note</div>
+            <div style={modalBodyStyle}>
+              <textarea style={textareaStyle} placeholder="Enter note..." value={modal.data.noteBody || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteBody: e.target.value } })} />
+              <input type="text" style={inputStyle} placeholder="Due date (e.g., 27 jan 2026)" value={modal.data.noteDueDate || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteDueDate: e.target.value } })} />
+            </div>
+            <div style={modalFooterStyle}>
+              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
+              <button style={buttonStyle('#6366f1', '#fff')} onClick={handleCreateNote} disabled={sending}>
+                {sending ? <span className="spinner spinner-white" /> : 'Create Note'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Query Type Modal */}
-      <Dialog open={showQueryModal} onClose={() => setShowQueryModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Resolve Conversation</DialogTitle>
-        <DialogContent>
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Query Type</InputLabel>
-            <Select
-              value={selectedQueryType}
-              onChange={(e) => setSelectedQueryType(e.target.value)}
-              label="Query Type"
-            >
-              <MenuItem value="Technical Issue">Technical Issue</MenuItem>
-              <MenuItem value="Billing Query">Billing Query</MenuItem>
-              <MenuItem value="General Inquiry">General Inquiry</MenuItem>
-              <MenuItem value="Feature Request">Feature Request</MenuItem>
-              <MenuItem value="Bug Report">Bug Report</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            label="Or enter custom query type"
-            fullWidth
-            value={customQueryType}
-            onChange={(e) => setCustomQueryType(e.target.value)}
-            sx={{ mt: 2 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowQueryModal(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={handleResolve}
-            disabled={!selectedQueryType && !customQueryType}
-          >
-            Resolve
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {modal.type === 'resolve' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>Resolve Conversation</div>
+            <div style={modalBodyStyle}>
+              <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
+                <option value="">Select Query Type</option>
+                <option value="Technical Support">Technical Support</option>
+                <option value="Billing Query">Billing Query</option>
+                <option value="General Inquiry">General Inquiry</option>
+                <option value="Feature Request">Feature Request</option>
+              </select>
+              <input type="text" style={inputStyle} placeholder="Or enter custom query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+            </div>
+            <div style={modalFooterStyle}>
+              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
+              <button style={buttonStyle('#10b981', '#fff')} onClick={handleResolve}>Resolve</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Reply Modal */}
-      <Dialog open={showReplyModal} onClose={() => setShowReplyModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          Reply to {replyMessage?.source === 'whatsapp' ? 'WhatsApp' : 'Email'}
-        </DialogTitle>
-        <DialogContent>
-          {replyMessage?.source === 'whatsapp' && !isWithin24HourWindow(selectedInbox) ? (
-            <TextField
-              label="Template Name"
-              fullWidth
-              value={replyTemplateName}
-              onChange={(e) => setReplyTemplateName(e.target.value)}
-              placeholder="e.g., t1, welcome_template"
-              helperText="24-hour window expired. You can only send templates."
-              sx={{ mt: 2 }}
-            />
-          ) : (
-            <TextField
-              label="Message"
-              fullWidth
-              multiline
-              rows={4}
-              value={replyBody}
-              onChange={(e) => setReplyBody(e.target.value)}
-              sx={{ mt: 2 }}
-            />
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowReplyModal(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
-            onClick={handleSendReply}
-            disabled={sending}
-          >
-            Send
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {modal.type === 'email' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>Compose Email</div>
+            <div style={modalBodyStyle}>
+              <input type="text" style={inputStyle} placeholder="Subject" value={modal.data.subject || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, subject: e.target.value } })} />
+              <textarea style={textareaStyle} placeholder="Email body..." value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
+            </div>
+            <div style={modalFooterStyle}>
+              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
+              <button style={buttonStyle('#3b82f6', '#fff')} onClick={handleSendEmail} disabled={sending}>
+                {sending ? <span className="spinner spinner-white" /> : '📧 Send Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Email Modal */}
-      <Dialog open={showEmailModal} onClose={() => setShowEmailModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Compose Email</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Subject"
-            fullWidth
-            value={emailSubject}
-            onChange={(e) => setEmailSubject(e.target.value)}
-            sx={{ mt: 2 }}
-          />
-          <TextField
-            label="Body"
-            fullWidth
-            multiline
-            rows={6}
-            value={emailBody}
-            onChange={(e) => setEmailBody(e.target.value)}
-            sx={{ mt: 2 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowEmailModal(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
-            onClick={handleSendEmail}
-            disabled={!emailSubject || !emailBody || sending}
-          >
-            Send Email
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {modal.type === 'whatsapp' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>Send WhatsApp Template</div>
+            <div style={modalBodyStyle}>
+              <input type="text" style={inputStyle} placeholder="Template name (e.g., t1)" value={modal.data.template || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, template: e.target.value } })} />
+            </div>
+            <div style={modalFooterStyle}>
+              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
+              <button style={buttonStyle('#25d366', '#fff')} onClick={handleSendWhatsApp} disabled={sending}>
+                {sending ? <span className="spinner spinner-white" /> : '💬 Send Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* WhatsApp Modal */}
-      <Dialog open={showWhatsappModal} onClose={() => setShowWhatsappModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Send WhatsApp Template</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Template Name"
-            fullWidth
-            value={whatsappTemplateName}
-            onChange={(e) => setWhatsappTemplateName(e.target.value)}
-            placeholder="e.g., t1, welcome_template"
-            sx={{ mt: 2 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowWhatsappModal(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
-            onClick={handleSendWhatsapp}
-            disabled={!whatsappTemplateName || sending}
-            sx={{ 
-              bgcolor: customColors.channel.whatsapp,
-              '&:hover': { bgcolor: '#1da851' },
-            }}
-          >
-            Send Template
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {modal.type === 'reply' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>Reply to {modal.data.replyMessage?.source === 'whatsapp' ? 'WhatsApp' : 'Email'}</div>
+            <div style={modalBodyStyle}>
+              {modal.data.replyMessage?.source === 'whatsapp' ? (
+                <>
+                  <input type="text" style={inputStyle} placeholder="Template name (for outside 24h window)" value={modal.data.template || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, template: e.target.value } })} />
+                  <textarea style={textareaStyle} placeholder="Or direct message (within 24h window)" value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
+                </>
+              ) : (
+                <textarea style={textareaStyle} placeholder="Your reply..." value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
+              )}
+            </div>
+            <div style={modalFooterStyle}>
+              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
+              <button style={buttonStyle('#6366f1', '#fff')} onClick={handleReply} disabled={sending}>
+                {sending ? <span className="spinner spinner-white" /> : '📤 Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast.text && <div style={toastStyle}>{toast.text}</div>}
     </MainLayout>
   );
 }

@@ -1,40 +1,18 @@
 import { useState, useEffect } from 'react';
-import { useGlobalStore } from '@/store/globalStore';
-import { format } from 'date-fns';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
-import Popover from '@mui/material/Popover';
-import CircularProgress from '@mui/material/CircularProgress';
-import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import EmailIcon from '@mui/icons-material/Email';
-import ChatIcon from '@mui/icons-material/Chat';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import WarningIcon from '@mui/icons-material/Warning';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import LinearProgress from '@mui/material/LinearProgress';
-import { MainLayout } from '@/components/layout/MainLayout';
-import { customColors } from '@/theme/theme';
-import { useSnackbar } from 'notistack';
+import { useGlobalStore } from '../store/globalStore';
+import { MainLayout } from '../components/layout/MainLayout';
+
+const formatDate = (date) => {
+  if (!date) return '';
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export default function Dashboard() {
-  const { getDashboardStats, fetchDashboard, fetchInboxes, loading, queryTypes } = useGlobalStore();
-  const { enqueueSnackbar } = useSnackbar();
+  const { getDashboardStats, fetchDashboard, fetchInboxes, loading } = useGlobalStore();
   const stats = getDashboardStats();
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
-  const [startAnchorEl, setStartAnchorEl] = useState(null);
-  const [endAnchorEl, setEndAnchorEl] = useState(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [message, setMessage] = useState({ text: '', type: '' });
 
   useEffect(() => {
     loadData();
@@ -42,449 +20,270 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      await Promise.all([
-        fetchDashboard(),
-        fetchInboxes({ limit: 100 }),
-      ]);
-    } catch (error) {
-      enqueueSnackbar('Failed to load dashboard data', { variant: 'error' });
+      await Promise.all([fetchDashboard(), fetchInboxes({ limit: 100 })]);
+    } catch {
+      showMessage('Failed to load dashboard data', 'error');
     }
+  };
+
+  const showMessage = (text, type) => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
   };
 
   const handleRefresh = () => {
     loadData();
-    enqueueSnackbar('Refreshing dashboard...', { variant: 'info' });
+    showMessage('Refreshing dashboard...', 'info');
   };
 
   const handleDateFilter = async () => {
     if (startDate || endDate) {
       try {
-        await fetchInboxes({
-          startDate: startDate ? format(startDate, 'yyyy-MM-dd') : '',
-          endDate: endDate ? format(endDate, 'yyyy-MM-dd') : '',
-          limit: 100,
-        });
-        enqueueSnackbar('Data filtered by date range', { variant: 'success' });
-      } catch (error) {
-        enqueueSnackbar('Failed to filter data', { variant: 'error' });
+        await fetchInboxes({ startDate, endDate, limit: 100 });
+        showMessage('Data filtered by date range', 'success');
+      } catch {
+        showMessage('Failed to filter data', 'error');
       }
     }
   };
 
-  const handleStartDateSelect = (date) => {
-    setStartDate(date);
-    setStartAnchorEl(null);
-    if (date && endDate && date > endDate) {
-      setEndDate(null);
-    }
-  };
-
-  const handleEndDateSelect = (date) => {
-    if (date && startDate && date < startDate) {
-      return;
-    }
-    setEndDate(date);
-    setEndAnchorEl(null);
-  };
-
   useEffect(() => {
-    if (startDate && endDate) {
-      handleDateFilter();
-    }
+    if (startDate && endDate) handleDateFilter();
   }, [startDate, endDate]);
 
   const statCards = [
-    { 
-      label: 'Unread', 
-      value: stats.unread || 0, 
-      icon: VisibilityOffIcon, 
-      color: customColors.stat.unread,
-      gradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-    },
-    { 
-      label: 'Read', 
-      value: stats.read || 0, 
-      icon: VisibilityIcon, 
-      color: customColors.stat.read,
-      gradient: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
-    },
-    { 
-      label: 'Started', 
-      value: stats.started || 0, 
-      icon: AccessTimeIcon, 
-      color: customColors.stat.pending,
-      gradient: 'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)',
-    },
-    { 
-      label: 'Resolved', 
-      value: stats.resolved || 0, 
-      icon: CheckCircleIcon, 
-      color: customColors.stat.resolved,
-      gradient: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
-    },
-    { 
-      label: 'Ended', 
-      value: stats.ended || 0, 
-      icon: WarningIcon, 
-      color: '#64748b',
-      gradient: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
-    },
-    { 
-      label: 'Pending', 
-      value: stats.pending || 0, 
-      icon: WarningIcon, 
-      color: customColors.stat.escalated,
-      gradient: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-    },
+    { label: 'Unread', value: stats.unread, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+    { label: 'Read', value: stats.read, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
+    { label: 'Started', value: stats.started, color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
+    { label: 'Resolved', value: stats.resolved, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
+    { label: 'Ended', value: stats.ended, color: '#64748b', bg: 'rgba(100, 116, 139, 0.1)' },
+    { label: 'Pending', value: stats.pending, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
   ];
 
   const isLoading = loading.dashboard || loading.inboxes;
 
+  const containerStyle = { padding: '32px', animation: 'fadeIn 0.3s ease-out' };
+
+  const headerStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '32px',
+    flexWrap: 'wrap',
+    gap: '16px',
+  };
+
+  const titleStyle = {
+    fontSize: '28px',
+    fontWeight: 700,
+    background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    marginBottom: '4px',
+  };
+
+  const subtitleStyle = { fontSize: '14px', color: '#64748b' };
+
+  const controlsStyle = { display: 'flex', alignItems: 'center', gap: '12px' };
+
+  const buttonStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 16px',
+    background: '#fff',
+    border: '1px solid rgba(0,0,0,0.1)',
+    borderRadius: '10px',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: '#374151',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  };
+
+  const inputStyle = {
+    padding: '10px 14px',
+    background: '#fff',
+    border: '1px solid rgba(0,0,0,0.1)',
+    borderRadius: '10px',
+    fontSize: '14px',
+    color: '#374151',
+    minWidth: '140px',
+  };
+
+  const cardGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '20px',
+    marginBottom: '32px',
+  };
+
+  const cardStyle = {
+    background: '#fff',
+    borderRadius: '16px',
+    padding: '24px',
+    border: '1px solid rgba(0,0,0,0.06)',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+    position: 'relative',
+    overflow: 'hidden',
+    transition: 'all 0.2s',
+  };
+
+  const sectionGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+    gap: '24px',
+  };
+
+  const sectionCardStyle = {
+    background: '#fff',
+    borderRadius: '16px',
+    padding: '24px',
+    border: '1px solid rgba(0,0,0,0.06)',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+  };
+
+  const sectionTitleStyle = { fontSize: '18px', fontWeight: 600, marginBottom: '20px' };
+
+  const progressBarStyle = (percentage, color) => ({
+    height: '8px',
+    borderRadius: '4px',
+    background: `linear-gradient(90deg, ${color} ${percentage}%, rgba(99, 102, 241, 0.08) ${percentage}%)`,
+  });
+
+  const toastStyle = {
+    position: 'fixed',
+    bottom: '24px',
+    right: '24px',
+    padding: '12px 20px',
+    borderRadius: '10px',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: '#fff',
+    background: message.type === 'error' ? '#ef4444' : message.type === 'success' ? '#10b981' : '#3b82f6',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+    zIndex: 9999,
+    animation: 'fadeIn 0.3s ease-out',
+  };
+
   return (
-    <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <MainLayout>
-        <Box sx={{ p: 4 }} className="animate-fade-in">
-          {/* Header */}
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              mb: 4,
-              flexWrap: 'wrap',
-              gap: 2,
-            }}
-          >
-            <Box>
-              <Typography 
-                variant="h4" 
-                fontWeight={700}
-                sx={{ 
-                  background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  mb: 0.5,
-                }}
-              >
-                Customer Support Dashboard
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Monitor and manage all customer conversations in one place
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Button
-                variant="outlined"
-                startIcon={isLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
-                onClick={handleRefresh}
-                disabled={isLoading}
-                sx={{ 
-                  bgcolor: 'background.paper',
-                  borderColor: 'divider',
-                }}
-              >
-                Refresh
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<CalendarTodayIcon sx={{ fontSize: 18 }} />}
-                onClick={(e) => setStartAnchorEl(e.currentTarget)}
-                sx={{ 
-                  minWidth: 150,
-                  bgcolor: 'background.paper',
-                  borderColor: 'divider',
-                  color: startDate ? 'text.primary' : 'text.secondary',
-                }}
-              >
-                {startDate ? format(startDate, 'MMM dd, yyyy') : 'Start Date'}
-              </Button>
-              <Popover
-                open={Boolean(startAnchorEl)}
-                anchorEl={startAnchorEl}
-                onClose={() => setStartAnchorEl(null)}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-              >
-                <DateCalendar value={startDate} onChange={handleStartDateSelect} />
-              </Popover>
+    <MainLayout>
+      <div style={containerStyle}>
+        <div style={headerStyle}>
+          <div>
+            <h1 style={titleStyle}>Customer Support Dashboard</h1>
+            <p style={subtitleStyle}>Monitor and manage all customer conversations</p>
+          </div>
+          <div style={controlsStyle}>
+            <button style={buttonStyle} onClick={handleRefresh} disabled={isLoading}>
+              {isLoading ? <span className="spinner" /> : '🔄'} Refresh
+            </button>
+            <input
+              type="date"
+              style={inputStyle}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <span style={{ color: '#94a3b8' }}>—</span>
+            <input
+              type="date"
+              style={inputStyle}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+        </div>
 
-              <Box 
-                sx={{ 
-                  width: 24, 
-                  height: 2, 
-                  bgcolor: 'divider', 
-                  borderRadius: 1 
-                }} 
-              />
+        {isLoading && (
+          <div style={{ height: '4px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: '2px', marginBottom: '24px', animation: 'pulse 1.5s infinite' }} />
+        )}
 
-              <Button
-                variant="outlined"
-                startIcon={<CalendarTodayIcon sx={{ fontSize: 18 }} />}
-                onClick={(e) => setEndAnchorEl(e.currentTarget)}
-                sx={{ 
-                  minWidth: 150,
-                  bgcolor: 'background.paper',
-                  borderColor: 'divider',
-                  color: endDate ? 'text.primary' : 'text.secondary',
-                }}
-              >
-                {endDate ? format(endDate, 'MMM dd, yyyy') : 'End Date'}
-              </Button>
-              <Popover
-                open={Boolean(endAnchorEl)}
-                anchorEl={endAnchorEl}
-                onClose={() => setEndAnchorEl(null)}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-              >
-                <DateCalendar
-                  value={endDate}
-                  onChange={handleEndDateSelect}
-                  minDate={startDate || undefined}
-                />
-              </Popover>
-            </Box>
-          </Box>
+        <div style={cardGridStyle}>
+          {statCards.map((stat) => (
+            <div key={stat.label} style={cardStyle}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: stat.color }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {stat.label}
+                  </div>
+                  <div style={{ fontSize: '36px', fontWeight: 800, color: stat.color, marginTop: '8px', lineHeight: 1 }}>
+                    {stat.value || 0}
+                  </div>
+                </div>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
+                  {stat.label === 'Unread' && '📩'}
+                  {stat.label === 'Read' && '📖'}
+                  {stat.label === 'Started' && '▶️'}
+                  {stat.label === 'Resolved' && '✅'}
+                  {stat.label === 'Ended' && '🏁'}
+                  {stat.label === 'Pending' && '⏳'}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
 
-          {/* Loading overlay */}
-          {isLoading && (
-            <Box sx={{ mb: 2 }}>
-              <LinearProgress />
-            </Box>
-          )}
+        <div style={sectionGridStyle}>
+          <div style={sectionCardStyle}>
+            <h3 style={sectionTitleStyle}>📈 Resolved by Query Type</h3>
+            {(stats.categoryResolvedSummary || []).length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {stats.categoryResolvedSummary.map((cat) => {
+                  const max = Math.max(...stats.categoryResolvedSummary.map(c => c.count), 1);
+                  const pct = (cat.count / max) * 100;
+                  return (
+                    <div key={cat._id}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat._id}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1' }}>{cat.count}</span>
+                      </div>
+                      <div style={progressBarStyle(pct, '#6366f1')} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No resolved queries yet</div>
+            )}
+          </div>
 
-          {/* Status Cards */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            {statCards.map((stat, index) => {
-              const Icon = stat.icon;
-              return (
-                <Grid item xs={12} sm={6} lg={2.4} key={stat.label}>
-                  <Card 
-                    className={`stat-card ${stat.bgClass}`}
-                    sx={{ 
-                      position: 'relative',
-                      overflow: 'hidden',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: `0 20px 40px -15px ${stat.color}40`,
-                      },
-                    }}
-                    style={{ animationDelay: `${index * 0.05}s` }}
-                  >
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: 4,
-                        background: stat.gradient,
-                      }}
-                    />
-                    <CardContent sx={{ pt: 3 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                        <Box>
-                          <Typography 
-                            variant="overline" 
-                            sx={{ 
-                              color: 'text.secondary',
-                              fontWeight: 600,
-                              letterSpacing: '0.05em',
-                              fontSize: '0.7rem',
-                            }}
-                          >
-                            {stat.label}
-                          </Typography>
-                          <Typography 
-                            variant="h3" 
-                            fontWeight={800}
-                            sx={{ 
-                              color: stat.color,
-                              lineHeight: 1.2,
-                              mt: 0.5,
-                            }}
-                          >
-                            {stat.value}
-                          </Typography>
-                        </Box>
-                        <Box
-                          sx={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: 3,
-                            background: `${stat.color}15`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Icon sx={{ fontSize: 26, color: stat.color }} />
-                        </Box>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              );
-            })}
-          </Grid>
-
-          <Grid container spacing={3}>
-            {/* Query Type Stats */}
-            <Grid item xs={12} lg={6}>
-              <Card sx={{ height: '100%' }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-                    <Box
-                      sx={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 2.5,
-                        background: customColors.gradients.primary,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+          <div style={sectionCardStyle}>
+            <h3 style={sectionTitleStyle}>📡 Resolved by Channel</h3>
+            {(stats.channelResolvedSummary || []).length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px' }}>
+                {stats.channelResolvedSummary.map((channel) => {
+                  const color = channel._id?.toLowerCase() === 'whatsapp' ? '#25d366' : '#3b82f6';
+                  return (
+                    <div
+                      key={channel._id}
+                      style={{
+                        padding: '20px',
+                        borderRadius: '16px',
+                        background: `linear-gradient(135deg, ${color}12, ${color}05)`,
+                        border: `1px solid ${color}25`,
+                        textAlign: 'center',
                       }}
                     >
-                      <TrendingUpIcon sx={{ color: 'white', fontSize: 22 }} />
-                    </Box>
-                    <Box>
-                      <Typography variant="h6" fontWeight={600}>
-                        Resolved by Query Type
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Track resolution across categories
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                    {(stats.categoryResolvedSummary || []).map((category) => {
-                      const maxCount = Math.max(...(stats.categoryResolvedSummary || []).map(c => c.count), 1);
-                      const percentage = (category.count / maxCount) * 100;
-                      return (
-                        <Box key={category._id}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="body2" fontWeight={500}>
-                              {category._id}
-                            </Typography>
-                            <Typography 
-                              variant="body2" 
-                              fontWeight={700}
-                              sx={{ color: 'primary.main' }}
-                            >
-                              {category.count}
-                            </Typography>
-                          </Box>
-                          <LinearProgress 
-                            variant="determinate" 
-                            value={percentage} 
-                            sx={{ 
-                              height: 8, 
-                              borderRadius: 4,
-                              bgcolor: 'rgba(99, 102, 241, 0.08)',
-                              '& .MuiLinearProgress-bar': {
-                                borderRadius: 4,
-                              },
-                            }}
-                          />
-                        </Box>
-                      );
-                    })}
-                    {(stats.categoryResolvedSummary || []).length === 0 && (
-                      <Box sx={{ textAlign: 'center', py: 4 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          No resolved queries yet
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
+                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>
+                        {channel._id?.toLowerCase() === 'whatsapp' ? '💬' : '📧'}
+                      </div>
+                      <div style={{ fontSize: '32px', fontWeight: 800, color, lineHeight: 1 }}>{channel.count}</div>
+                      <div style={{ fontSize: '13px', color: '#64748b', marginTop: '8px', textTransform: 'capitalize' }}>
+                        {channel._id}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No channel data available</div>
+            )}
+          </div>
+        </div>
+      </div>
 
-            {/* Channel Stats */}
-            <Grid item xs={12} lg={6}>
-              <Card sx={{ height: '100%' }}>
-                <CardContent>
-                  <Box sx={{ mb: 3 }}>
-                    <Typography variant="h6" fontWeight={600}>
-                      Resolved by Channel
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Performance across communication channels
-                    </Typography>
-                  </Box>
-                  <Grid container spacing={2}>
-                    {(stats.channelResolvedSummary || []).map((channel) => {
-                      const channelColors = {
-                        whatsapp: { bg: customColors.channel.whatsapp, icon: ChatIcon },
-                        email: { bg: customColors.channel.email, icon: EmailIcon },
-                        web: { bg: '#6366f1', icon: TrendingUpIcon },
-                      };
-                      const config = channelColors[channel._id?.toLowerCase()] || channelColors.email;
-                      const Icon = config.icon;
-                      return (
-                        <Grid item xs={6} md={4} key={channel._id}>
-                          <Box
-                            sx={{
-                              borderRadius: 4,
-                              p: 3,
-                              background: `linear-gradient(135deg, ${config.bg}12, ${config.bg}05)`,
-                              border: `1px solid ${config.bg}25`,
-                              transition: 'all 0.3s',
-                              '&:hover': {
-                                transform: 'translateY(-2px)',
-                                boxShadow: `0 12px 24px -8px ${config.bg}30`,
-                              },
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                              <Box
-                                sx={{
-                                  width: 44,
-                                  height: 44,
-                                  borderRadius: 2.5,
-                                  background: `linear-gradient(135deg, ${config.bg}, ${config.bg}cc)`,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  boxShadow: `0 8px 16px -4px ${config.bg}50`,
-                                }}
-                              >
-                                <Icon sx={{ color: 'white', fontSize: 22 }} />
-                              </Box>
-                              <Typography fontWeight={600} sx={{ textTransform: 'capitalize' }}>
-                                {channel._id}
-                              </Typography>
-                            </Box>
-                            <Typography 
-                              variant="h2" 
-                              fontWeight={800}
-                              sx={{ color: config.bg, lineHeight: 1 }}
-                            >
-                              {channel.count}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" mt={1}>
-                              Resolved
-                            </Typography>
-                          </Box>
-                        </Grid>
-                      );
-                    })}
-                    {(stats.channelResolvedSummary || []).length === 0 && (
-                      <Grid item xs={12}>
-                        <Box sx={{ textAlign: 'center', py: 4 }}>
-                          <Typography variant="body2" color="text.secondary">
-                            No channel data available
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    )}
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Box>
-      </MainLayout>
-    </LocalizationProvider>
+      {message.text && <div style={toastStyle}>{message.text}</div>}
+    </MainLayout>
   );
 }
