@@ -1,65 +1,58 @@
-import { useLocation, Link } from "react-router-dom";
-import { useEffect } from "react";
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import HomeIcon from '@mui/icons-material/Home';
+import { Link } from 'react-router-dom';
 
-const NotFound = () => {
-  const location = useLocation();
+export default function NotFound() {
+  const containerStyle = {
+    minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    textAlign: 'center',
+    padding: '24px',
+  };
 
-  useEffect(() => {
-    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
-  }, [location.pathname]);
+  const iconStyle = {
+    fontSize: '80px',
+    marginBottom: '24px',
+  };
+
+  const titleStyle = {
+    fontSize: '48px',
+    fontWeight: 800,
+    color: '#0f172a',
+    marginBottom: '12px',
+  };
+
+  const messageStyle = {
+    fontSize: '18px',
+    color: '#64748b',
+    marginBottom: '32px',
+  };
+
+  const buttonStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '14px 28px',
+    borderRadius: '12px',
+    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+    color: '#fff',
+    fontSize: '16px',
+    fontWeight: 600,
+    textDecoration: 'none',
+    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)',
+    transition: 'all 0.2s',
+  };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        minHeight: '100vh',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-      }}
-    >
-      <Box sx={{ textAlign: 'center' }}>
-        <Typography 
-          variant="h1" 
-          sx={{ 
-            fontSize: '8rem',
-            fontWeight: 800,
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            lineHeight: 1,
-            mb: 2,
-          }}
-        >
-          404
-        </Typography>
-        <Typography variant="h5" color="text.secondary" fontWeight={500} mb={1}>
-          Page not found
-        </Typography>
-        <Typography variant="body1" color="text.secondary" mb={4} maxWidth={400}>
-          The page you're looking for doesn't exist or has been moved.
-        </Typography>
-        <Button 
-          component={Link} 
-          to="/" 
-          variant="contained" 
-          size="large"
-          startIcon={<HomeIcon />}
-          sx={{ 
-            px: 4,
-            py: 1.5,
-            borderRadius: 3,
-          }}
-        >
-          Back to Dashboard
-        </Button>
-      </Box>
-    </Box>
+    <div style={containerStyle}>
+      <div style={iconStyle}>🔍</div>
+      <h1 style={titleStyle}>404</h1>
+      <p style={messageStyle}>Oops! The page you're looking for doesn't exist.</p>
+      <Link to="/" style={buttonStyle}>
+        ← Back to Dashboard
+      </Link>
+    </div>
   );
-};
-
-export default NotFound;
+}

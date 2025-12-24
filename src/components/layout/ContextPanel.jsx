@@ -1,53 +1,32 @@
-import { useState, useEffect } from 'react';
-import { useGlobalStore } from '@/store/globalStore';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import LinearProgress from '@mui/material/LinearProgress';
-import Avatar from '@mui/material/Avatar';
-import CircularProgress from '@mui/material/CircularProgress';
-import EmailIcon from '@mui/icons-material/Email';
-import NoteIcon from '@mui/icons-material/Note';
-import PhoneIcon from '@mui/icons-material/Phone';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import DevicesIcon from '@mui/icons-material/Devices';
-import LabelIcon from '@mui/icons-material/Label';
-import CloseIcon from '@mui/icons-material/Close';
-import { customColors } from '@/theme/theme';
+import { useState } from 'react';
+import { useGlobalStore } from '../../store/globalStore';
+
+const formatDate = (date) => {
+  if (!date) return '';
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export function ContextPanel({ inbox, onClose }) {
-  const { 
-    subscriptions, payments, views, notes,
-    fetchUserSubscriptions, fetchUserPayments, fetchUserViews, fetchUserActivities 
-  } = useGlobalStore();
+  const { subscriptions, payments, views, notes, fetchUserSubscriptions, fetchUserPayments, fetchUserViews, fetchUserActivities } = useGlobalStore();
   const [activeModal, setActiveModal] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [pagination, setPagination] = useState({});
 
   if (!inbox) return null;
 
-  const user = inbox.user || {};
-  const userId = user.id || user._id;
+  const user = inbox.owner || {};
+  const userId = user._id;
 
   const loadDataForModal = async (type) => {
     if (!userId) return;
     setLoadingData(true);
     try {
-      if (type === 'subscription') await fetchUserSubscriptions(userId, 20);
-      if (type === 'payment') await fetchUserPayments(userId, 20);
-      if (type === 'view') await fetchUserViews(userId, 20);
-      if (type === 'notes') await fetchUserActivities(userId, 20);
+      let result;
+      if (type === 'subscription') result = await fetchUserSubscriptions(userId, 20);
+      if (type === 'payment') result = await fetchUserPayments(userId, 20);
+      if (type === 'view') result = await fetchUserViews(userId, 20);
+      if (type === 'notes') result = await fetchUserActivities(userId, 20);
+      if (result?.pagination) setPagination(result.pagination);
     } finally {
       setLoadingData(false);
     }
@@ -65,185 +44,396 @@ export function ContextPanel({ inbox, onClose }) {
     { key: 'notes', label: 'Notes', count: notes.length },
   ];
 
+  // Styles
+  const panelStyle = {
+    position: 'fixed',
+    right: 0,
+    top: 0,
+    zIndex: 1100,
+    height: '100vh',
+    width: '340px',
+    borderLeft: '1px solid rgba(0,0,0,0.08)',
+    background: '#fff',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '-8px 0 32px -12px rgba(0,0,0,0.15)',
+    animation: 'slideInRight 0.3s ease-out',
+  };
+
+  const headerStyle = {
+    display: 'flex',
+    height: '72px',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottom: '1px solid rgba(0,0,0,0.08)',
+    padding: '0 24px',
+  };
+
+  const closeButtonStyle = {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    background: 'rgba(0,0,0,0.04)',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '16px',
+  };
+
+  const avatarStyle = {
+    width: '72px',
+    height: '72px',
+    margin: '0 auto 16px',
+    borderRadius: '16px',
+    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '24px',
+    fontWeight: 600,
+  };
+
+  const infoRowStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 16px',
+    borderRadius: '10px',
+    background: 'rgba(0,0,0,0.02)',
+    marginBottom: '8px',
+  };
+
+  const dataButtonStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    padding: '14px 16px',
+    borderRadius: '10px',
+    border: '1px solid rgba(0,0,0,0.08)',
+    background: '#fff',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontSize: '14px',
+    fontWeight: 500,
+  };
+
+  const badgeStyle = {
+    padding: '4px 10px',
+    borderRadius: '6px',
+    background: '#6366f1',
+    color: '#fff',
+    fontSize: '12px',
+    fontWeight: 600,
+  };
+
+  const modalOverlayStyle = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  };
+
+  const modalStyle = {
+    background: '#fff',
+    borderRadius: '20px',
+    width: '100%',
+    maxWidth: '700px',
+    maxHeight: '80vh',
+    overflow: 'hidden',
+    boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+  };
+
+  const modalHeaderStyle = {
+    padding: '20px 24px',
+    borderBottom: '1px solid rgba(0,0,0,0.08)',
+    fontSize: '18px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  };
+
+  const tableStyle = {
+    width: '100%',
+    borderCollapse: 'collapse',
+  };
+
+  const thStyle = {
+    padding: '12px 16px',
+    textAlign: 'left',
+    fontSize: '11px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: '#64748b',
+    background: '#f8fafc',
+    borderBottom: '2px solid rgba(0,0,0,0.06)',
+  };
+
+  const tdStyle = {
+    padding: '14px 16px',
+    fontSize: '14px',
+    borderBottom: '1px solid rgba(0,0,0,0.04)',
+  };
+
+  const progressStyle = (percentage) => ({
+    width: '60px',
+    height: '6px',
+    borderRadius: '3px',
+    background: `linear-gradient(90deg, #6366f1 ${percentage}%, rgba(99,102,241,0.12) ${percentage}%)`,
+  });
+
+  const initials = (user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
+
   return (
     <>
-      <Box
-        component="aside"
-        className="animate-slide-in-right"
-        sx={{
-          position: 'fixed',
-          right: 0,
-          top: 0,
-          zIndex: 1100,
-          height: '100vh',
-          width: 340,
-          borderLeft: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '-8px 0 32px -12px rgba(0, 0, 0, 0.15)',
-        }}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            height: 72,
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            px: 3,
-          }}
-        >
-          <Typography variant="h6" fontWeight={600}>Customer Details</Typography>
-          <IconButton onClick={onClose} sx={{ bgcolor: 'rgba(0,0,0,0.04)' }}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Box>
+      <aside style={panelStyle}>
+        <div style={headerStyle}>
+          <span style={{ fontSize: '16px', fontWeight: 600 }}>Customer Details</span>
+          <button style={closeButtonStyle} onClick={onClose}>✕</button>
+        </div>
 
-        <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <Avatar
-              sx={{
-                width: 72, height: 72, mx: 'auto', mb: 2,
-                background: customColors.gradients.primary,
-                fontSize: '1.5rem', fontWeight: 600,
-              }}
-            >
-              {(user.name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2)}
-            </Avatar>
-            <Typography variant="h6" fontWeight={600}>{user.name || 'Unknown'}</Typography>
-            <Typography variant="body2" color="text.secondary">Customer</Typography>
-          </Box>
+        <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div style={avatarStyle}>{initials}</div>
+            <div style={{ fontSize: '18px', fontWeight: 600 }}>{user.name || 'Unknown'}</div>
+            <div style={{ fontSize: '13px', color: '#64748b' }}>Customer</div>
+          </div>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 3 }}>
-            {[
-              user.email && { icon: EmailIcon, value: user.email },
-              user.mobile && { icon: PhoneIcon, value: user.mobile },
-              user.location && { icon: LocationOnIcon, value: user.location },
-              user.speciality && { icon: LabelIcon, value: user.speciality },
-              user.device && { icon: DevicesIcon, value: user.device },
-              user.registration_date && { icon: CalendarTodayIcon, value: `Joined ${new Date(user.registration_date).toLocaleDateString()}` },
-            ].filter(Boolean).map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 2, bgcolor: 'rgba(0,0,0,0.02)' }}>
-                  <Icon sx={{ fontSize: 18, color: 'primary.main' }} />
-                  <Typography variant="body2">{item.value}</Typography>
-                </Box>
-              );
-            })}
-          </Box>
+          <div style={{ marginBottom: '24px' }}>
+            {user.email && (
+              <div style={infoRowStyle}>
+                <span>📧</span>
+                <span style={{ fontSize: '14px' }}>{user.email}</span>
+              </div>
+            )}
+            {user.mobile && (
+              <div style={infoRowStyle}>
+                <span>📱</span>
+                <span style={{ fontSize: '14px' }}>{user.mobile}</span>
+              </div>
+            )}
+            {user.location && (
+              <div style={infoRowStyle}>
+                <span>📍</span>
+                <span style={{ fontSize: '14px' }}>{user.location}</span>
+              </div>
+            )}
+            {user.speciality && (
+              <div style={infoRowStyle}>
+                <span>🏷️</span>
+                <span style={{ fontSize: '14px' }}>{user.speciality}</span>
+              </div>
+            )}
+            {user.device && (
+              <div style={infoRowStyle}>
+                <span>💻</span>
+                <span style={{ fontSize: '14px' }}>{user.device}</span>
+              </div>
+            )}
+          </div>
 
-          <Divider sx={{ my: 2 }} />
-
-          <Box>
-            <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 1.5 }}>
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: '20px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '12px' }}>
               Customer Data
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
               {dataItems.map((item) => (
-                <Button
-                  key={item.key}
-                  variant="outlined"
-                  size="small"
-                  onClick={() => handleOpenModal(item.key)}
-                  sx={{ justifyContent: 'space-between', py: 1.5, borderRadius: 2, borderColor: 'divider', color: 'text.primary' }}
-                >
-                  <Typography variant="body2" fontWeight={500}>{item.label}</Typography>
-                  <Chip label={item.count} size="small" sx={{ height: 22, bgcolor: 'primary.main', color: 'white', fontWeight: 600 }} />
-                </Button>
+                <button key={item.key} style={dataButtonStyle} onClick={() => handleOpenModal(item.key)}>
+                  <span>{item.label}</span>
+                  <span style={badgeStyle}>{item.count}</span>
+                </button>
               ))}
-            </Box>
-          </Box>
-        </Box>
-      </Box>
+            </div>
+          </div>
+        </div>
+      </aside>
 
-      {/* Modals */}
-      <Dialog open={activeModal === 'subscription'} onClose={() => setActiveModal(null)} maxWidth="md" fullWidth>
-        <DialogTitle>Subscriptions - {user.name}</DialogTitle>
-        <DialogContent>
-          {loadingData ? <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box> : (
-            <Table>
-              <TableHead><TableRow><TableCell>Package</TableCell><TableCell>Plan</TableCell><TableCell>Start</TableCell><TableCell>End</TableCell></TableRow></TableHead>
-              <TableBody>
-                {subscriptions.map((sub) => (
-                  <TableRow key={sub.id || sub._id}>
-                    <TableCell>{sub.package_name}</TableCell>
-                    <TableCell>{sub.plan_type}</TableCell>
-                    <TableCell>{new Date(sub.package_start_date).toLocaleDateString()}</TableCell>
-                    <TableCell>{new Date(sub.package_end_date).toLocaleDateString()}</TableCell>
-                  </TableRow>
-                ))}
-                {subscriptions.length === 0 && <TableRow><TableCell colSpan={4} align="center">No subscriptions</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Subscriptions Modal */}
+      {activeModal === 'subscription' && (
+        <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <span>Subscriptions - {user.name}</span>
+              <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
+            </div>
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
+              {loadingData ? (
+                <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Package</th>
+                      <th style={thStyle}>Plan</th>
+                      <th style={thStyle}>Method</th>
+                      <th style={thStyle}>Status</th>
+                      <th style={thStyle}>Start</th>
+                      <th style={thStyle}>End</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subscriptions.map((sub) => (
+                      <tr key={sub._id}>
+                        <td style={tdStyle}>{sub.packageId?.packageName || '-'}</td>
+                        <td style={tdStyle}>{sub.packageId?.planType === 1 ? 'Premium' : 'Basic'}</td>
+                        <td style={tdStyle}>{sub.paymentmethod}</td>
+                        <td style={tdStyle}>
+                          <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: sub.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: sub.status === 'active' ? '#10b981' : '#ef4444', textTransform: 'capitalize' }}>
+                            {sub.status}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>{formatDate(sub.startDate)}</td>
+                        <td style={tdStyle}>{formatDate(sub.endDate)}</td>
+                      </tr>
+                    ))}
+                    {subscriptions.length === 0 && (
+                      <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No subscriptions</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-      <Dialog open={activeModal === 'payment'} onClose={() => setActiveModal(null)} maxWidth="md" fullWidth>
-        <DialogTitle>Payments - {user.name}</DialogTitle>
-        <DialogContent>
-          {loadingData ? <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box> : (
-            <Table>
-              <TableHead><TableRow><TableCell>Course</TableCell><TableCell>Amount</TableCell><TableCell>Date</TableCell></TableRow></TableHead>
-              <TableBody>
-                {payments.map((p) => (
-                  <TableRow key={p.id || p._id}>
-                    <TableCell>{p.course_name}</TableCell>
-                    <TableCell>{p.currency_type} {p.amount}</TableCell>
-                    <TableCell>{new Date(p.payment_date).toLocaleDateString()}</TableCell>
-                  </TableRow>
-                ))}
-                {payments.length === 0 && <TableRow><TableCell colSpan={3} align="center">No payments</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Payments Modal */}
+      {activeModal === 'payment' && (
+        <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <span>Payments - {user.name}</span>
+              <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
+            </div>
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
+              {loadingData ? (
+                <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Course</th>
+                      <th style={thStyle}>Amount</th>
+                      <th style={thStyle}>Method</th>
+                      <th style={thStyle}>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map((p) => (
+                      <tr key={p._id}>
+                        <td style={tdStyle}>{p.coursename || '-'}</td>
+                        <td style={tdStyle}>{p.currencytype} {p.amountpaid}</td>
+                        <td style={tdStyle}>{p.paymentmethod}</td>
+                        <td style={tdStyle}>{formatDate(p.whenentered)}</td>
+                      </tr>
+                    ))}
+                    {payments.length === 0 && (
+                      <tr><td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No payments</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-      <Dialog open={activeModal === 'view'} onClose={() => setActiveModal(null)} maxWidth="md" fullWidth>
-        <DialogTitle>Views - {user.name}</DialogTitle>
-        <DialogContent>
-          {loadingData ? <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box> : (
-            <Table>
-              <TableHead><TableRow><TableCell>Course</TableCell><TableCell>Duration</TableCell><TableCell>Progress</TableCell></TableRow></TableHead>
-              <TableBody>
-                {views.map((v) => (
-                  <TableRow key={v.id || v._id}>
-                    <TableCell>{v.course_name}</TableCell>
-                    <TableCell>{v.duration} min</TableCell>
-                    <TableCell><LinearProgress variant="determinate" value={v.percentage_video_watched || 0} sx={{ width: 60 }} /></TableCell>
-                  </TableRow>
-                ))}
-                {views.length === 0 && <TableRow><TableCell colSpan={3} align="center">No views</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Views Modal */}
+      {activeModal === 'view' && (
+        <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <span>Views - {user.name}</span>
+              <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
+            </div>
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
+              {loadingData ? (
+                <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Course</th>
+                      <th style={thStyle}>Sub Course</th>
+                      <th style={thStyle}>Duration</th>
+                      <th style={thStyle}>Progress</th>
+                      <th style={thStyle}>Device</th>
+                      <th style={thStyle}>Last Seen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {views.map((v) => {
+                      const pct = parseFloat(v.percentvideoplay || 0) * 100;
+                      return (
+                        <tr key={v._id}>
+                          <td style={tdStyle}>{v.coursename || v.courseid?.coursename || '-'}</td>
+                          <td style={tdStyle}>{v.subcoursename || '-'}</td>
+                          <td style={tdStyle}>{v.durationofvideo}</td>
+                          <td style={tdStyle}>
+                            <div style={progressStyle(pct)} title={`${pct.toFixed(1)}%`} />
+                          </td>
+                          <td style={tdStyle}>{v.devices}</td>
+                          <td style={tdStyle}>{formatDate(v.lastseen)}</td>
+                        </tr>
+                      );
+                    })}
+                    {views.length === 0 && (
+                      <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No views</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-      <Dialog open={activeModal === 'notes'} onClose={() => setActiveModal(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Notes - {user.name}</DialogTitle>
-        <DialogContent>
-          {loadingData ? <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box> : (
-            <Table>
-              <TableHead><TableRow><TableCell>Note</TableCell><TableCell>Due Date</TableCell></TableRow></TableHead>
-              <TableBody>
-                {notes.map((n) => (
-                  <TableRow key={n.id || n._id}>
-                    <TableCell>{n.body}</TableCell>
-                    <TableCell>{new Date(n.due_date).toLocaleDateString()}</TableCell>
-                  </TableRow>
-                ))}
-                {notes.length === 0 && <TableRow><TableCell colSpan={2} align="center">No notes</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Notes Modal */}
+      {activeModal === 'notes' && (
+        <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
+          <div style={{ ...modalStyle, maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <span>Notes - {user.name}</span>
+              <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
+            </div>
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
+              {loadingData ? (
+                <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Note</th>
+                      <th style={thStyle}>Due Date</th>
+                      <th style={thStyle}>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {notes.map((n) => (
+                      <tr key={n._id}>
+                        <td style={tdStyle}>{n.body}</td>
+                        <td style={tdStyle}>{formatDate(n.due_date)}</td>
+                        <td style={tdStyle}>{formatDate(n.createdAt)}</td>
+                      </tr>
+                    ))}
+                    {notes.length === 0 && (
+                      <tr><td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No notes</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1,8 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --sidebar-width: 280px;
-  --header-height: 72px;
+  --sidebar-width: 260px;
+  --header-height: 64px;
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --primary-dark: #4f46e5;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+  --whatsapp: #25d366;
+  --email: #3b82f6;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border: rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.12);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 }
 
 * {
@@ -19,216 +39,84 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
 }
 
-/* Enhanced scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
-  border-radius: 4px;
-  transition: background 0.2s;
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
+  background: rgba(99, 102, 241, 0.5);
 }
 
-/* Selection styling */
 ::selection {
   background: rgba(99, 102, 241, 0.2);
-  color: #4f46e5;
+  color: var(--primary-dark);
 }
 
-/* Animations */
-@keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  outline: none;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-slide-in-right {
-  animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeIn 0.3s ease-out;
 }
 
-/* Glass morphism effect */
-.glass {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
 }
 
-/* Gradient text */
-.gradient-text {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Stat card styles */
-.stat-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 100px;
-  height: 100px;
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(99, 102, 241, 0.2);
+  border-top-color: var(--primary);
   border-radius: 50%;
-  transform: translate(30%, -30%);
-  opacity: 0.1;
+  animation: spin 0.8s linear infinite;
 }
 
-.stat-card-blue::before { background: #3b82f6; }
-.stat-card-amber::before { background: #f59e0b; }
-.stat-card-emerald::before { background: #10b981; }
-.stat-card-violet::before { background: #8b5cf6; }
-.stat-card-red::before { background: #ef4444; }
-
-/* Message bubbles */
-.message-bubble {
-  position: relative;
-  border-radius: 16px;
-  transition: all 0.2s;
+.spinner-white {
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: white;
 }
-
-.message-bubble-outgoing {
-  border-bottom-right-radius: 4px;
-}
-
-.message-bubble-incoming {
-  border-bottom-left-radius: 4px;
-}
-
-/* Inbox item hover effect */
-.inbox-item {
-  position: relative;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.inbox-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #6366f1, #8b5cf6);
-  border-radius: 0 4px 4px 0;
-  opacity: 0;
-  transform: scaleY(0);
-  transition: all 0.2s;
-}
-
-.inbox-item:hover::before,
-.inbox-item.active::before {
-  opacity: 1;
-  transform: scaleY(1);
-}
-
-/* Focus ring */
-*:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
-}
-
-/* Smooth image loading */
-img {
-  transition: opacity 0.3s;
-}
-
-img[loading] {
-  opacity: 0;
-}
-
-img.loaded {
-  opacity: 1;
-}
-
-/* Badge pulse animation */
-.badge-pulse {
-  position: relative;
-}
-
-.badge-pulse::after {
-  content: '';
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 8px;
-  height: 8px;
-  background: #ef4444;
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-/* Channel icons */
-.channel-whatsapp {
-  color: #25d366;
-}
-
-.channel-email {
-  color: #3b82f6;
-}
-
-/* Status colors */
-.status-read { color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
-.status-unread { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
-.status-resolved { color: #10b981; background: rgba(16, 185, 129, 0.1); }
-.status-pending { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); }
-.status-escalated { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-.status-started { color: #6366f1; background: rgba(99, 102, 241, 0.1); }
