@@ -190,7 +190,7 @@ export function ContextPanel({ inbox, onClose }) {
     background: `linear-gradient(90deg, #6366f1 ${percentage}%, rgba(99,102,241,0.12) ${percentage}%)`,
   });
 
-  const initials = (user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
+  const initials = (user.fullname || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
 
   return (
     <>
@@ -203,7 +203,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <div style={avatarStyle}>{initials}</div>
-            <div style={{ fontSize: '18px', fontWeight: 600 }}>{user.name || 'Unknown'}</div>
+            <div style={{ fontSize: '18px', fontWeight: 600 }}>{user.fullname || 'Unknown'}</div>
             <div style={{ fontSize: '13px', color: '#64748b' }}>Customer</div>
           </div>
 
@@ -261,7 +261,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Subscriptions - {user.name}</span>
+              <span>Subscriptions - {user.fullname}</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -310,7 +310,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Payments - {user.name}</span>
+              <span>Payments - {user.fullname}</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -351,7 +351,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Views - {user.name}</span>
+              <span>Views - {user.fullname}</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -401,7 +401,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={{ ...modalStyle, maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Notes - {user.name}</span>
+              <span>Notes - {user.fullname}</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
