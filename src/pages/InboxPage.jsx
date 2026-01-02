@@ -109,13 +109,23 @@ export default function InboxPage() {
 
   const handleSendWhatsApp = async () => {
     if (!selectedInbox || !modal.data.template) return;
+    const mobile = selectedInbox.owner?.mobile;
+    console.log('WhatsApp Send Debug:', { selectedInbox, mobile, template: modal.data.template });
+    if (!mobile) {
+      showToast('Mobile number not found', 'error');
+      return;
+    }
     setSending(true);
     try {
-      await sendWhatsappTemplate(selectedInbox.owner?.mobile, modal.data.template);
+      console.log('Sending WhatsApp with:', { mobile, template: modal.data.template });
+      await sendWhatsappTemplate(mobile, modal.data.template);
       showToast('WhatsApp template sent', 'success');
       closeModal();
       await fetchMessages(selectedInbox._id);
-    } catch { showToast('Failed to send WhatsApp', 'error'); }
+    } catch (error) {
+      console.error('WhatsApp send error:', error);
+      showToast('Failed to send WhatsApp', 'error');
+    }
     finally { setSending(false); }
   };
 
@@ -125,17 +135,31 @@ export default function InboxPage() {
     try {
       const msg = modal.data.replyMessage;
       const isWhatsApp = msg?.source === 'whatsapp';
+      console.log('Reply Debug:', { isWhatsApp, msg, owner: selectedInbox.owner, ownerKeys: Object.keys(selectedInbox.owner || {}) });
       if (isWhatsApp && modal.data.template) {
-        await sendWhatsappTemplate(selectedInbox.owner?.mobile, modal.data.template);
+        const mobile = selectedInbox.owner?.mobile;
+        console.log('Owner object properties:', selectedInbox.owner);
+        console.log('Sending WhatsApp template reply:', { mobile, template: modal.data.template });
+        if (!mobile) throw new Error('Mobile number not found');
+        await sendWhatsappTemplate(mobile, modal.data.template);
       } else if (isWhatsApp && modal.data.body) {
-        await sendWhatsappMessage(selectedInbox.owner?.mobile, modal.data.body);
+        const mobile = selectedInbox.owner?.mobile;
+        console.log('Sending WhatsApp message reply:', { mobile, body: modal.data.body });
+        if (!mobile) throw new Error('Mobile number not found');
+        await sendWhatsappMessage(mobile, modal.data.body);
       } else if (modal.data.body) {
-        await sendEmailReply(msg?.messageId, modal.data.body, selectedInbox.owner?.email);
+        const email = selectedInbox.owner?.email;
+        console.log('Sending email reply:', { messageId: msg?.messageId, email });
+        if (!email) throw new Error('Email not found');
+        await sendEmailReply(msg?.messageId, modal.data.body, email);
       }
       showToast('Reply sent', 'success');
       closeModal();
       await fetchMessages(selectedInbox._id);
-    } catch { showToast('Failed to send reply', 'error'); }
+    } catch (error) {
+      console.error('Reply send error:', error);
+      showToast('Failed to send reply', 'error');
+    }
     finally { setSending(false); }
   };
 
@@ -215,7 +239,7 @@ export default function InboxPage() {
               filteredInboxes.map((inbox) => {
                 const user = getUser(inbox);
                 const isSelected = selectedInbox?._id === inbox._id;
-                const initials = (user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
+                const initials = (user.fullname || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
                 const channelColor = inbox.source === 'whatsapp' ? '#25d366' : '#3b82f6';
                 return (
                   <div key={inbox._id} style={inboxItemStyle(isSelected, inbox.status === 'unread')} onClick={() => handleInboxClick(inbox)}>
@@ -226,7 +250,7 @@ export default function InboxPage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span>{inbox.source === 'whatsapp' ? '💬' : '📧'}</span>
                             <span style={{ fontWeight: inbox.status === 'unread' ? 700 : 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {user.name || 'Unknown User'}
+                              {user.fullname || 'Unknown User'}
                             </span>
                           </div>
                           <span style={chipStyle(getStatusColor(inbox.status))}>{inbox.status}</span>
