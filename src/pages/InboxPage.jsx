@@ -14,7 +14,6 @@ const statusFilters = [
   { value: 'read', label: 'Read' },
   { value: 'started', label: 'Started' },
   { value: 'resolved', label: 'Resolved' },
-  { value: 'pending', label: 'Pending' },
 ];
 
 export default function InboxPage() {
@@ -26,6 +25,7 @@ export default function InboxPage() {
 
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [modal, setModal] = useState({ type: null, data: {} });
+  const [search, setSearch] = useState('');
   const [toast, setToast] = useState({ text: '', type: '' });
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
@@ -47,12 +47,98 @@ export default function InboxPage() {
 
   const closeModal = () => setModal({ type: null, data: {} });
 
+  // Robust date parser: handles numeric timestamps, ISO strings only
+  // Returns 0 for human-readable strings (e.g., "Jan 2, 6:03 AM") without explicit year,
+  // so getItemTimestamp can infer the year from createdAt
+  const parseDate = (d) => {
+    if (d === null || d === undefined || d === '') return 0;
+    if (typeof d === 'number') return d;
+    const asNumber = Number(d);
+    if (!Number.isNaN(asNumber) && Number.isFinite(asNumber)) return asNumber;
+    // Only parse ISO strings or strings that contain a 4-digit year
+    if (typeof d === 'string') {
+      // ISO format: contains 'T' or 'Z'
+      if (d.includes('T') || d.includes('Z')) {
+        const t = Date.parse(d);
+        if (Number.isFinite(t)) return t;
+      }
+      // Check if string contains a 4-digit year
+      if (d.match(/\d{4}/)) {
+        const t = Date.parse(d);
+        if (Number.isFinite(t)) return t;
+      }
+    }
+    // For human-readable strings without explicit year, return 0
+    return 0;
+  };
+
+  const statusOrder = { unread: 0, read: 1, started: 2, resolved: 3 };
+
+  // Determine a reliable timestamp for an inbox item using updatedAt, falling back to createdAt
+  const getItemTimestamp = (item) => {
+    if (!item) return 0;
+    const updated = item.updatedAt;
+    const created = item.createdAt;
+    // Try parsing updatedAt directly
+    let t = parseDate(updated);
+    if (t) {
+      console.log(`[parseDate direct] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | updatedAt="${updated}" | timestamp=${t} (${new Date(t).toISOString()})`);
+      return t;
+    }
+    // If updatedAt is a human string without year, infer year from createdAt
+    if (typeof updated === 'string' && updated.trim() !== '' && created) {
+      try {
+        const createdDate = new Date(created);
+        const createdYear = createdDate.getFullYear();
+        // Try with createdAt's year first
+        let withYear = Date.parse(`${updated} ${createdYear}`);
+        if (Number.isFinite(withYear)) {
+          const parsedDate = new Date(withYear);
+          // If parsed date is before createdAt, it likely belongs to the next year
+          if (parsedDate < createdDate) {
+            withYear = Date.parse(`${updated} ${createdYear + 1}`);
+            if (Number.isFinite(withYear)) {
+              console.log(`[year bumped] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | updatedAt="${updated}" | createdAt="${created}" | timestamp=${withYear} (${new Date(withYear).toISOString()})`);
+              return withYear;
+            }
+          }
+          console.log(`[year inferred] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | updatedAt="${updated}" | createdAt="${created}" | timestamp=${withYear} (${new Date(withYear).toISOString()})`);
+          return withYear;
+        }
+      } catch (e) {
+        console.log(`[error parsing]`, e);
+      }
+    }
+    // Fallback to createdAt
+    const fallback = parseDate(created);
+    console.log(`[fallback] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | createdAt="${created}" | timestamp=${fallback} (${new Date(fallback).toISOString()})`);
+    return fallback;
+  };
+
+  const allowedStatuses = Object.keys(statusOrder);
+
   const filteredInboxes = inboxes
-    .filter((i) => activeFilter === 'all' || i.status === activeFilter)
+    .filter((i) => {
+      // When 'all' is selected, only show the allowed statuses in the defined order
+      if (activeFilter === 'all') return allowedStatuses.includes(i.status);
+      // When a specific status is selected, show only that status
+      return i.status === activeFilter;
+    })
+    .filter((i) => {
+      if (!search) return true;
+      const fullname = (i.owner?.fullname || i.owner?.name || '').toLowerCase();
+      return fullname.includes(search.toLowerCase());
+    })
     .sort((a, b) => {
-      if (a.status === 'unread' && b.status !== 'unread') return -1;
-      if (a.status !== 'unread' && b.status === 'unread') return 1;
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      const orderA = statusOrder[a.status] ?? 999;
+      const orderB = statusOrder[b.status] ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      // Within the same status group, sort by a reliable timestamp descending (latest first)
+      const aTime = getItemTimestamp(a);
+      const bTime = getItemTimestamp(b);
+      const diff = bTime - aTime;
+      console.log(`[sort] ${b.owner?.fullname || b.owner?.name || 'Unknown'} (${bTime}) vs ${a.owner?.fullname || a.owner?.name || 'Unknown'} (${aTime}) → diff=${diff}`);
+      return diff;
     });
 
   const inboxMessages = messages
@@ -217,7 +303,14 @@ export default function InboxPage() {
                 {loading.inboxes ? <span className="spinner" /> : '🔄'}
               </button>
             </div>
-            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>{filteredInboxes.length} conversations</p>
+            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>{filteredInboxes.length} conversations</p>
+            <input
+              type="text"
+              placeholder="Search by name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ ...inputStyle, marginBottom: '12px' }}
+            />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {statusFilters.map((f) => (
                 <button key={f.value} style={filterBtnStyle(activeFilter === f.value)} onClick={() => setActiveFilter(f.value)}>
@@ -239,21 +332,21 @@ export default function InboxPage() {
               filteredInboxes.map((inbox) => {
                 const user = getUser(inbox);
                 const isSelected = selectedInbox?._id === inbox._id;
-                const initials = (user.fullname || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
+                const initials = (user.fullname || user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
                 const channelColor = inbox.source === 'whatsapp' ? '#25d366' : '#3b82f6';
                 return (
                   <div key={inbox._id} style={inboxItemStyle(isSelected, inbox.status === 'unread')} onClick={() => handleInboxClick(inbox)}>
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                       <div style={avatarStyle(channelColor)}>{initials}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>{inbox.source === 'whatsapp' ? '💬' : '📧'}</span>
-                            <span style={{ fontWeight: inbox.status === 'unread' ? 700 : 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {user.fullname || 'Unknown User'}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', minWidth: 0, flex: 1 }}>
+                            <span style={{ flexShrink: 0 }}>{inbox.source === 'whatsapp' ? '💬' : '📧'}</span>
+                            <span style={{ fontWeight: inbox.status === 'unread' ? 700 : 600, fontSize: '14px', wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                              {user.fullname || user.name || 'Unknown User'}
                             </span>
                           </div>
-                          <span style={chipStyle(getStatusColor(inbox.status))}>{inbox.status}</span>
+                          <span style={{ ...chipStyle(getStatusColor(inbox.status)), flexShrink: 0 }}>{inbox.status}</span>
                         </div>
                         <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '8px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                           {inbox.preview || 'No preview available'}
@@ -275,10 +368,10 @@ export default function InboxPage() {
               <div style={threadHeaderStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
-                    {(getUser(selectedInbox).name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    {(getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2)}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: '15px' }}>{getUser(selectedInbox).name || 'Unknown User'}</div>
+                    <div style={{ fontWeight: 600, fontSize: '15px' }}>{getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'Unknown User'}</div>
                     <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       {selectedInbox.source === 'whatsapp' ? '💬' : '📧'}
                       {getUser(selectedInbox).email || getUser(selectedInbox).mobile}
@@ -310,7 +403,7 @@ export default function InboxPage() {
                       return (
                         <div key={msg._id} style={messageStyle(isOutgoing)}>
                           {msg.subject && <div style={{ fontWeight: 600, marginBottom: '8px' }}>{msg.subject}</div>}
-                          <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>{msg.body || msg.text}</div>
+                          <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.body || msg.text}</div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
                             <span style={{ fontSize: '11px', opacity: 0.7 }}>{formatDate(msg.createdAt)}</span>
                             {!isOutgoing && isStarted && (
