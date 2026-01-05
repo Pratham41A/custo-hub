@@ -38,10 +38,10 @@ export function ContextPanel({ inbox, onClose }) {
   };
 
   const dataItems = [
-    { key: 'subscription', label: 'Subscriptions', count: subscriptions.length },
-    { key: 'payment', label: 'Payments', count: payments.length },
-    { key: 'view', label: 'Views', count: views.length },
-    { key: 'notes', label: 'Notes', count: notes.length },
+    { key: 'subscription', label: 'Subscriptions' },
+    { key: 'payment', label: 'Payments' },
+    { key: 'view', label: 'Views' },
+    { key: 'notes', label: 'Notes' },
   ];
 
   // Styles
@@ -144,7 +144,7 @@ export function ContextPanel({ inbox, onClose }) {
     background: '#fff',
     borderRadius: '20px',
     width: '100%',
-    maxWidth: '700px',
+    maxWidth: '90vw',
     maxHeight: '80vh',
     overflow: 'hidden',
     boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
@@ -162,6 +162,7 @@ export function ContextPanel({ inbox, onClose }) {
 
   const tableStyle = {
     width: '100%',
+    tableLayout: 'fixed',
     borderCollapse: 'collapse',
   };
 
@@ -175,22 +176,20 @@ export function ContextPanel({ inbox, onClose }) {
     color: '#64748b',
     background: '#f8fafc',
     borderBottom: '2px solid rgba(0,0,0,0.06)',
+    whiteSpace: 'normal',
+    wordBreak: 'break-word',
   };
 
   const tdStyle = {
     padding: '14px 16px',
     fontSize: '14px',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
+    whiteSpace: 'normal',
+    wordBreak: 'break-word',
+    overflowWrap: 'anywhere',
   };
 
-  const progressStyle = (percentage) => ({
-    width: '60px',
-    height: '6px',
-    borderRadius: '3px',
-    background: `linear-gradient(90deg, #6366f1 ${percentage}%, rgba(99,102,241,0.12) ${percentage}%)`,
-  });
-
-  const initials = (user.fullname || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
+  const initials = (user.fullname || user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
 
   return (
     <>
@@ -203,7 +202,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <div style={avatarStyle}>{initials}</div>
-            <div style={{ fontSize: '18px', fontWeight: 600 }}>{user.fullname || 'Unknown'}</div>
+            <div style={{ fontSize: '18px', fontWeight: 600 }}>{user.fullname || user.name || 'Unknown'}</div>
             <div style={{ fontSize: '13px', color: '#64748b' }}>Customer</div>
           </div>
 
@@ -248,7 +247,6 @@ export function ContextPanel({ inbox, onClose }) {
               {dataItems.map((item) => (
                 <button key={item.key} style={dataButtonStyle} onClick={() => handleOpenModal(item.key)}>
                   <span>{item.label}</span>
-                  <span style={badgeStyle}>{item.count}</span>
                 </button>
               ))}
             </div>
@@ -261,7 +259,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Subscriptions - {user.fullname}</span>
+              <span>Subscriptions - {user.fullname || user.name} ({subscriptions.length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -280,20 +278,23 @@ export function ContextPanel({ inbox, onClose }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {subscriptions.map((sub) => (
-                      <tr key={sub._id}>
-                        <td style={tdStyle}>{sub.packageId?.packageName || '-'}</td>
-                        <td style={tdStyle}>{sub.packageId?.planType === 1 ? 'Premium' : 'Basic'}</td>
-                        <td style={tdStyle}>{sub.paymentmethod}</td>
-                        <td style={tdStyle}>
-                          <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: sub.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: sub.status === 'active' ? '#10b981' : '#ef4444', textTransform: 'capitalize' }}>
-                            {sub.status}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>{formatDate(sub.startDate)}</td>
-                        <td style={tdStyle}>{formatDate(sub.endDate)}</td>
-                      </tr>
-                    ))}
+                    {subscriptions.map((sub) => {
+                      const planValue = sub.packageId?.planType ?? sub.planType ?? sub.plan ?? null;
+                      return (
+                        <tr key={sub._id}>
+                          <td style={tdStyle}>{sub.packageId?.packageName || '-'}</td>
+                          <td style={tdStyle}>{planValue != null ? String(planValue) : '-'}</td>
+                          <td style={tdStyle}>{sub.paymentmethod}</td>
+                          <td style={tdStyle}>
+                            <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: sub.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: sub.status === 'active' ? '#10b981' : '#ef4444', textTransform: 'capitalize' }}>
+                              {sub.status}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>{formatDate(sub.startDate)}</td>
+                          <td style={tdStyle}>{formatDate(sub.endDate)}</td>
+                        </tr>
+                      );
+                    })}
                     {subscriptions.length === 0 && (
                       <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No subscriptions</td></tr>
                     )}
@@ -310,7 +311,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Payments - {user.fullname}</span>
+              <span>Payments - {user.fullname || user.name} ({payments.length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -331,12 +332,13 @@ export function ContextPanel({ inbox, onClose }) {
                       <tr key={p._id}>
                         <td style={tdStyle}>{p.coursename || '-'}</td>
                         <td style={tdStyle}>{p.currencytype} {p.amountpaid}</td>
+                        <td style={tdStyle}>{p.transactionid || p.transactionId || '-'}</td>
                         <td style={tdStyle}>{p.paymentmethod}</td>
                         <td style={tdStyle}>{formatDate(p.whenentered)}</td>
                       </tr>
                     ))}
                     {payments.length === 0 && (
-                      <tr><td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No payments</td></tr>
+                      <tr><td colSpan={5} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No payments</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -351,7 +353,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Views - {user.fullname}</span>
+              <span>Views - {user.fullname || user.name} ({views.length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -371,15 +373,15 @@ export function ContextPanel({ inbox, onClose }) {
                   </thead>
                   <tbody>
                     {views.map((v) => {
-                      const pct = parseFloat(v.percentvideoplay || 0) * 100;
+                      const rawVal = v?.percentvideoplay;
+                      const parsed = rawVal != null && rawVal !== '' ? Number(rawVal) : NaN;
+                      const pct = !isNaN(parsed) ? parsed : null;
                       return (
                         <tr key={v._id}>
                           <td style={tdStyle}>{v.coursename || v.courseid?.coursename || '-'}</td>
                           <td style={tdStyle}>{v.subcoursename || '-'}</td>
                           <td style={tdStyle}>{v.durationofvideo}</td>
-                          <td style={tdStyle}>
-                            <div style={progressStyle(pct)} title={`${pct.toFixed(1)}%`} />
-                          </td>
+                          <td style={tdStyle}>{pct != null ? `${pct.toFixed(2)}%` : '-'}</td>
                           <td style={tdStyle}>{v.devices}</td>
                           <td style={tdStyle}>{formatDate(v.lastseen)}</td>
                         </tr>
@@ -399,9 +401,9 @@ export function ContextPanel({ inbox, onClose }) {
       {/* Notes Modal */}
       {activeModal === 'notes' && (
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
-          <div style={{ ...modalStyle, maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...modalStyle, maxWidth: '1000px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Notes - {user.fullname}</span>
+              <span>Notes - {user.fullname || user.name} ({notes.length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>

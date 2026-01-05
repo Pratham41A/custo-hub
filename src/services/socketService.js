@@ -9,6 +9,30 @@ class SocketService {
   reconnectAttempts = 0;
   maxReconnectAttempts = 5;
 
+  playNotificationSound() {
+    // Create a simple beep notification sound using Web Audio API
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      // Set sound parameters: frequency, duration
+      oscillator.frequency.value = 800; // Hz
+      oscillator.type = 'sine';
+
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (error) {
+      console.warn('Could not play notification sound:', error);
+    }
+  }
+
   connect() {
     if (this.socket?.connected) {
       console.log('Socket already connected');
@@ -44,49 +68,12 @@ class SocketService {
       }
     });
 
-    // Listen for inbox updates
-    this.socket.on('inbox:updated', (inbox) => {
-      console.log('Inbox updated event:', inbox);
-      const store = useGlobalStore.getState();
-      store.handleInboxUpdated(inbox);
-    });
-
-    // Listen for new inboxes
-    this.socket.on('inbox:created', (inbox) => {
-      console.log('New inbox created:', inbox);
-      const store = useGlobalStore.getState();
-      store.handleInboxCreated(inbox);
-    });
-
-    // Listen for new messages
-    this.socket.on('message:created', (message) => {
+    // Listen for incoming messages (Outlook/WhatsApp)
+    this.socket.on('message', (message) => {
       console.log('New message received:', message);
+      this.playNotificationSound();
       const store = useGlobalStore.getState();
       store.handleMessageCreated(message);
-    });
-
-    // Listen for WhatsApp webhook events
-    this.socket.on('whatsapp:message', (data) => {
-      console.log('WhatsApp message event:', data);
-      const store = useGlobalStore.getState();
-      if (data.message) {
-        store.handleMessageCreated(data.message);
-      }
-      if (data.inbox) {
-        store.handleInboxUpdated(data.inbox);
-      }
-    });
-
-    // Listen for Outlook webhook events
-    this.socket.on('outlook:message', (data) => {
-      console.log('Outlook message event:', data);
-      const store = useGlobalStore.getState();
-      if (data.message) {
-        store.handleMessageCreated(data.message);
-      }
-      if (data.inbox) {
-        store.handleInboxUpdated(data.inbox);
-      }
     });
   }
 

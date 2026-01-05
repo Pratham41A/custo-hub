@@ -10,8 +10,6 @@ const formatDate = (date) => {
 export default function Dashboard() {
   const { getDashboardStats, fetchDashboard, fetchInboxes, loading } = useGlobalStore();
   const stats = getDashboardStats();
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [message, setMessage] = useState({ text: '', type: '' });
 
   useEffect(() => {
@@ -36,28 +34,13 @@ export default function Dashboard() {
     showMessage('Refreshing dashboard...', 'info');
   };
 
-  const handleDateFilter = async () => {
-    if (startDate || endDate) {
-      try {
-        await fetchInboxes({ startDate, endDate, limit: 100 });
-        showMessage('Data filtered by date range', 'success');
-      } catch {
-        showMessage('Failed to filter data', 'error');
-      }
-    }
-  };
 
-  useEffect(() => {
-    if (startDate && endDate) handleDateFilter();
-  }, [startDate, endDate]);
 
   const statCards = [
     { label: 'Unread', value: stats.unread, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
     { label: 'Read', value: stats.read, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
     { label: 'Started', value: stats.started, color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
     { label: 'Resolved', value: stats.resolved, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
-    { label: 'Ended', value: stats.ended, color: '#64748b', bg: 'rgba(100, 116, 139, 0.1)' },
-    { label: 'Pending', value: stats.pending, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
   ];
 
   const isLoading = loading.dashboard || loading.inboxes;
@@ -178,19 +161,6 @@ export default function Dashboard() {
             <button style={buttonStyle} onClick={handleRefresh} disabled={isLoading}>
               {isLoading ? <span className="spinner" /> : '🔄'} Refresh
             </button>
-            <input
-              type="date"
-              style={inputStyle}
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-            <span style={{ color: '#94a3b8' }}>—</span>
-            <input
-              type="date"
-              style={inputStyle}
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
           </div>
         </div>
 
