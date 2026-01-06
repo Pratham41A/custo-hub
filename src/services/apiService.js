@@ -128,6 +128,11 @@ class ApiService {
       body: { owner, body, due_date: dueDate },
     });
   }
+
+  // Fetch Query Types - GET /support/fetchQueryTypes
+  async fetchQueryTypes() {
+    return this.request('/support/fetchQueryTypes');
+  }
 }
 
 export const apiService = new ApiService();

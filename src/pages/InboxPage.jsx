@@ -5,7 +5,15 @@ import { ContextPanel } from '../components/layout/ContextPanel';
 
 const formatDate = (date) => {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const parsed = new Date(date);
+  if (isNaN(parsed.getTime()) || parsed.getFullYear() < 2020) {
+    return date;
+  }
+  return parsed.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  });
 };
 
 const statusFilters = [
@@ -21,6 +29,7 @@ export default function InboxPage() {
     inboxes, messages, selectedInbox, setSelectedInbox, updateInboxStatus,
     activeFilter, setActiveFilter, loading, fetchInboxes, fetchMessages,
     sendWhatsappTemplate, sendWhatsappMessage, sendEmailReply, sendNewEmail, createNote,
+    queryTypes, fetchQueryTypes,
   } = useGlobalStore();
 
   const [showContextPanel, setShowContextPanel] = useState(false);
@@ -31,6 +40,7 @@ export default function InboxPage() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => { loadInboxes(); }, [activeFilter]);
+  useEffect(() => { fetchQueryTypes(); }, []);
 
   const loadInboxes = async () => {
     try {
@@ -477,10 +487,20 @@ export default function InboxPage() {
             <div style={modalBodyStyle}>
               <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
                 <option value="">Select Query Type</option>
-                <option value="Technical Support">Technical Support</option>
-                <option value="Billing Query">Billing Query</option>
-                <option value="General Inquiry">General Inquiry</option>
-                <option value="Feature Request">Feature Request</option>
+                {queryTypes.length > 0 ? (
+                  queryTypes.map((qt) => (
+                    <option key={qt._id || qt.name || qt} value={qt.name || qt}>
+                      {qt.name || qt}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Technical Support">Technical Support</option>
+                    <option value="Billing Query">Billing Query</option>
+                    <option value="General Inquiry">General Inquiry</option>
+                    <option value="Feature Request">Feature Request</option>
+                  </>
+                )}
               </select>
               <input type="text" style={inputStyle} placeholder="Or enter custom query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
             </div>
