@@ -4,7 +4,15 @@ import { MainLayout } from '../components/layout/MainLayout';
 
 const formatDate = (date) => {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const parsed = new Date(date);
+  if (isNaN(parsed.getTime()) || parsed.getFullYear() < 2020) {
+    return date;
+  }
+  return parsed.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  });
 };
 
 export default function Dashboard() {

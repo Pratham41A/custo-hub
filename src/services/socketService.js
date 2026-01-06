@@ -1,16 +1,13 @@
 import { io } from 'socket.io-client';
-import { useGlobalStore } from '@/store/globalStore';
+import { useGlobalStore } from '../store/globalStore';
 
 const SOCKET_URL = 'https://sadmin-api.onference.in';
 
 class SocketService {
   socket = null;
   isConnected = false;
-  reconnectAttempts = 0;
-  maxReconnectAttempts = 5;
 
   playNotificationSound() {
-    // Create a simple beep notification sound using Web Audio API
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
@@ -19,8 +16,7 @@ class SocketService {
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      // Set sound parameters: frequency, duration
-      oscillator.frequency.value = 800; // Hz
+      oscillator.frequency.value = 800;
       oscillator.type = 'sine';
 
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
@@ -44,15 +40,13 @@ class SocketService {
     this.socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: this.maxReconnectAttempts,
+      reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
     });
 
     this.socket.on('connect', () => {
       console.log('Socket connected:', this.socket.id);
       this.isConnected = true;
-      this.reconnectAttempts = 0;
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -62,18 +56,67 @@ class SocketService {
 
     this.socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
-      this.reconnectAttempts++;
-      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.log('Max reconnection attempts reached');
+    });
+
+    // Listen for incoming messages
+    this.socket.on('message', (data) => {
+      console.log('Socket [message] received:', data);
+      
+      const store = useGlobalStore.getState();
+      if (data && data._id) {
+        store.handleMessageCreated({
+          _id: data._id,
+          inboxId: data.inboxId,
+          from: data.from,
+          to: data.to,
+          subject: data.subject,
+          body: data.body,
+          source: data.source,
+          type: data.type,
+          template: data.template,
+          inReplyTo: data.inReplyTo,
+          messageId: data.messageId,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        });
+        console.log('Message added to state');
       }
     });
 
-    // Listen for incoming messages (Outlook/WhatsApp)
-    this.socket.on('message', (message) => {
-      console.log('New message received:', message);
+    // Listen for inbox updates
+    this.socket.on('inbox', (data) => {
+      console.log('Socket [inbox] received:', data);
       this.playNotificationSound();
+      
       const store = useGlobalStore.getState();
-      store.handleMessageCreated(message);
+      if (data && data._id) {
+        // Check if inbox exists in state - update or add
+        const existingInbox = store.inboxes.find(i => i._id === data._id);
+        
+        if (existingInbox) {
+          // Update existing inbox
+          store.handleInboxUpdated({
+            _id: data._id,
+            owner: data.owner,
+            createdAt: data.createdAt,
+            preview: data.preview,
+            status: data.status,
+            updatedAt: data.updatedAt,
+          });
+          console.log('Inbox updated in state');
+        } else {
+          // Add new inbox
+          store.handleInboxCreated({
+            _id: data._id,
+            owner: data.owner,
+            createdAt: data.createdAt,
+            preview: data.preview,
+            status: data.status,
+            updatedAt: data.updatedAt,
+          });
+          console.log('New inbox added to state');
+        }
+      }
     });
   }
 
@@ -83,19 +126,10 @@ class SocketService {
       this.socket = null;
     }
     this.isConnected = false;
-    console.log('Socket disconnected manually');
   }
 
   isSocketConnected() {
     return this.socket?.connected || false;
-  }
-
-  emit(event, data) {
-    if (this.socket?.connected) {
-      this.socket.emit(event, data);
-    } else {
-      console.warn('Cannot emit, socket not connected');
-    }
   }
 }
 

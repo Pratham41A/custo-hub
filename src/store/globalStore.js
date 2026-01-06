@@ -9,6 +9,7 @@ export const useGlobalStore = create((set, get) => ({
   messages: [],
   views: [],
   notes: [],
+  queryTypes: [],
   dashboardData: null,
   
   // Loading states
@@ -37,6 +38,7 @@ export const useGlobalStore = create((set, get) => ({
   setMessages: (messages) => set({ messages }),
   setViews: (views) => set({ views }),
   setNotes: (notes) => set({ notes }),
+  setQueryTypes: (queryTypes) => set({ queryTypes }),
   setDashboardData: (dashboardData) => set({ dashboardData }),
   
   setSelectedInbox: (inbox) => set({ selectedInbox: inbox }),
@@ -224,6 +226,19 @@ export const useGlobalStore = create((set, get) => ({
       throw error;
     }
   },
+
+  // Fetch Query Types
+  fetchQueryTypes: async () => {
+    try {
+      const response = await apiService.fetchQueryTypes();
+      const queryTypes = response.data || [];
+      set({ queryTypes });
+      return queryTypes;
+    } catch (error) {
+      console.error('Failed to fetch query types:', error);
+      return [];
+    }
+  },
   
   // Dashboard Stats - matches API response format
   getDashboardStats: () => {
@@ -256,16 +271,35 @@ export const useGlobalStore = create((set, get) => ({
   },
   
   // Socket Event Handlers
-  handleInboxUpdated: (inbox) => set((state) => ({
-    inboxes: state.inboxes.map((i) => i._id === inbox._id ? inbox : i),
-    selectedInbox: state.selectedInbox?._id === inbox._id ? inbox : state.selectedInbox,
-  })),
+  handleInboxUpdated: (inbox) => set((state) => {
+    console.log('Store: Updating inbox', inbox._id);
+    return {
+      inboxes: state.inboxes.map((i) => 
+        i._id === inbox._id 
+          ? { ...i, ...inbox }
+          : i
+      ),
+      selectedInbox: state.selectedInbox?._id === inbox._id 
+        ? { ...state.selectedInbox, ...inbox }
+        : state.selectedInbox,
+    };
+  }),
   
-  handleInboxCreated: (inbox) => set((state) => ({
-    inboxes: [inbox, ...state.inboxes],
-  })),
+  handleInboxCreated: (inbox) => set((state) => {
+    console.log('Store: Adding new inbox', inbox._id);
+    const exists = state.inboxes.some(i => i._id === inbox._id);
+    if (exists) return state;
+    return {
+      inboxes: [inbox, ...state.inboxes],
+    };
+  }),
   
-  handleMessageCreated: (message) => set((state) => ({
-    messages: [...state.messages, message],
-  })),
+  handleMessageCreated: (message) => set((state) => {
+    console.log('Store: Adding new message', message._id);
+    const exists = state.messages.some(m => m._id === message._id);
+    if (exists) return state;
+    return {
+      messages: [...state.messages, message],
+    };
+  }),
 }));
