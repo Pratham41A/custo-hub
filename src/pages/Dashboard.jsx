@@ -204,17 +204,17 @@ export default function Dashboard() {
 
         <div style={sectionGridStyle}>
           <div style={sectionCardStyle}>
-            <h3 style={sectionTitleStyle}>📈 Resolved by Query Type</h3>
-            {(stats.categoryResolvedSummary || []).length > 0 ? (
+            <h3 style={sectionTitleStyle}>📈 Query Types</h3>
+            {(stats.queryTypes || []).length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {stats.categoryResolvedSummary.map((cat) => {
-                  const max = Math.max(...stats.categoryResolvedSummary.map(c => c.count), 1);
-                  const pct = (cat.count / max) * 100;
+                {stats.queryTypes.map((qt) => {
+                  const max = Math.max(...stats.queryTypes.map(q => q.count), 1);
+                  const pct = (qt.count / max) * 100;
                   return (
-                    <div key={cat._id}>
+                    <div key={qt._id}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat._id}</span>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1' }}>{cat.count}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, textTransform: 'capitalize' }}>{qt._id}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1' }}>{qt.count}</span>
                       </div>
                       <div style={progressBarStyle(pct, '#6366f1')} />
                     </div>
@@ -222,16 +222,27 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No resolved queries yet</div>
+              <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No query types data</div>
             )}
           </div>
 
           <div style={sectionCardStyle}>
-            <h3 style={sectionTitleStyle}>📡 Resolved by Channel</h3>
-            {(stats.channelResolvedSummary || []).length > 0 ? (
+            <h3 style={sectionTitleStyle}>📡 Channels</h3>
+            {(stats.channels || []).length > 0 ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px' }}>
-                {stats.channelResolvedSummary.map((channel) => {
-                  const color = channel._id?.toLowerCase() === 'whatsapp' ? '#25d366' : '#3b82f6';
+                {stats.channels.map((channel) => {
+                  const colors = {
+                    whatsapp: '#25d366',
+                    outlook: '#0078d4',
+                    webchat: '#6366f1',
+                  };
+                  const icons = {
+                    whatsapp: '💬',
+                    outlook: '📧',
+                    webchat: '🌐',
+                  };
+                  const color = colors[channel._id?.toLowerCase()] || '#6366f1';
+                  const icon = icons[channel._id?.toLowerCase()] || '📨';
                   return (
                     <div
                       key={channel._id}
@@ -243,9 +254,7 @@ export default function Dashboard() {
                         textAlign: 'center',
                       }}
                     >
-                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>
-                        {channel._id?.toLowerCase() === 'whatsapp' ? '💬' : '📧'}
-                      </div>
+                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>{icon}</div>
                       <div style={{ fontSize: '32px', fontWeight: 800, color, lineHeight: 1 }}>{channel.count}</div>
                       <div style={{ fontSize: '13px', color: '#64748b', marginTop: '8px', textTransform: 'capitalize' }}>
                         {channel._id}
