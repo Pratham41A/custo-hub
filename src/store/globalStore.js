@@ -245,16 +245,26 @@ export const useGlobalStore = create((set, get) => ({
     const { dashboardData } = get();
     
     if (dashboardData) {
-      const { statusSummary = {}, categoryResolvedSummary = [], channelResolvedSummary = [] } = dashboardData;
+      const statusKeys = ['unread', 'read', 'started', 'resolved'];
+      const channelKeys = ['whatsapp', 'outlook', 'webchat'];
+      
+      // Extract channels
+      const channels = channelKeys
+        .filter(key => dashboardData[key] !== undefined)
+        .map(key => ({ _id: key, count: dashboardData[key] || 0 }));
+      
+      // Extract query types (everything else)
+      const queryTypes = Object.keys(dashboardData)
+        .filter(key => !statusKeys.includes(key) && !channelKeys.includes(key))
+        .map(key => ({ _id: key, count: dashboardData[key] || 0 }));
+      
       return {
-        unread: statusSummary.unread || 0,
-        read: statusSummary.read || 0,
-        started: statusSummary.started || 0,
-        resolved: statusSummary.resolved || 0,
-        ended: statusSummary.ended || 0,
-        pending: statusSummary.pending || 0,
-        categoryResolvedSummary,
-        channelResolvedSummary,
+        unread: dashboardData.unread || 0,
+        read: dashboardData.read || 0,
+        started: dashboardData.started || 0,
+        resolved: dashboardData.resolved || 0,
+        channels,
+        queryTypes,
       };
     }
     
@@ -263,10 +273,8 @@ export const useGlobalStore = create((set, get) => ({
       read: 0,
       started: 0,
       resolved: 0,
-      ended: 0,
-      pending: 0,
-      categoryResolvedSummary: [],
-      channelResolvedSummary: [],
+      channels: [],
+      queryTypes: [],
     };
   },
   
