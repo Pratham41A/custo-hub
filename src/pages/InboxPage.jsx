@@ -3,6 +3,7 @@ import { useGlobalStore } from '../store/globalStore';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ContextPanel } from '../components/layout/ContextPanel';
 import { EmailEditor } from '../components/EmailEditor';
+import { MessageBubble } from '../components/MessageBubble';
 
 const formatDate = (date) => {
   if (!date) return '';
@@ -463,56 +464,15 @@ export default function InboxPage() {
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}><span className="spinner" /></div>
                 ) : (
                   <>
-                    {inboxMessages.map((msg) => {
-                      const isOutgoing = msg.from === 'Support' || msg.direction === 'outbound';
-                      return (
-                        <div key={msg._id} style={messageStyle(isOutgoing)}>
-                          {msg.subject && <div style={{ fontWeight: 600, marginBottom: '8px' }}>{msg.subject}</div>}
-                          <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.body || msg.text}</div>
-                          
-                          {/* Attachments Display */}
-                          {msg.attachments && msg.attachments.length > 0 && (
-                            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${isOutgoing ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'}` }}>
-                              <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', opacity: 0.8 }}>📎 Attachments:</div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {msg.attachments.map((attachment, idx) => (
-                                  <a
-                                    key={idx}
-                                    href={attachment.url || attachment}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                      fontSize: '13px',
-                                      color: isOutgoing ? '#fff' : '#6366f1',
-                                      textDecoration: 'underline',
-                                      wordBreak: 'break-word',
-                                      opacity: 0.9,
-                                      transition: 'opacity 0.2s',
-                                    }}
-                                    onMouseEnter={(e) => e.target.style.opacity = '1'}
-                                    onMouseLeave={(e) => e.target.style.opacity = '0.9'}
-                                  >
-                                    {typeof attachment === 'string' ? attachment.split('/').pop() : attachment.name || `Attachment ${idx + 1}`}
-                                  </a>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
-                            <span style={{ fontSize: '11px', opacity: 0.7 }}>{formatDate(msg.createdAt)}</span>
-                            {!isOutgoing && isStarted && (
-                              <button
-                                style={{ background: 'transparent', border: 'none', color: isOutgoing ? '#fff' : '#6366f1', cursor: 'pointer', fontSize: '16px' }}
-                                onClick={() => setReplyingToId(replyingToId === msg._id ? null : msg._id)}
-                              >
-                                ↩️
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {inboxMessages.map((msg) => (
+                      <MessageBubble
+                        key={msg._id}
+                        msg={msg}
+                        allMessages={inboxMessages}
+                        isStarted={isStarted}
+                        onReply={(messageId) => setReplyingToId(replyingToId === messageId ? null : messageId)}
+                      />
+                    ))}
                     <div ref={messagesEndRef} />
                   </>
                 )}
