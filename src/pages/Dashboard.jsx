@@ -34,7 +34,7 @@ export default function Dashboard() {
 
   const showMessage = (text, type) => {
     setMessage({ text, type });
-    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+    setTimeout(() => setMessage({ text: '', type: '' }), 1000);
   };
 
   const handleRefresh = () => {
@@ -160,17 +160,6 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div style={containerStyle}>
-        <div style={headerStyle}>
-          <div>
-            <h1 style={titleStyle}>Customer Support Dashboard</h1>
-            <p style={subtitleStyle}>Monitor and manage all customer conversations</p>
-          </div>
-          <div style={controlsStyle}>
-            <button style={buttonStyle} onClick={handleRefresh} disabled={isLoading}>
-              {isLoading ? <span className="spinner" /> : '🔄'} Refresh
-            </button>
-          </div>
-        </div>
 
         {isLoading && (
           <div style={{ height: '4px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: '2px', marginBottom: '24px', animation: 'pulse 1.5s infinite' }} />
@@ -189,14 +178,6 @@ export default function Dashboard() {
                     {stat.value || 0}
                   </div>
                 </div>
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
-                  {stat.label === 'Unread' && '📩'}
-                  {stat.label === 'Read' && '📖'}
-                  {stat.label === 'Started' && '▶️'}
-                  {stat.label === 'Resolved' && '✅'}
-                  {stat.label === 'Ended' && '🏁'}
-                  {stat.label === 'Pending' && '⏳'}
-                </div>
               </div>
             </div>
           ))}
@@ -204,7 +185,7 @@ export default function Dashboard() {
 
         <div style={sectionGridStyle}>
           <div style={sectionCardStyle}>
-            <h3 style={sectionTitleStyle}>📈 Query Types</h3>
+            <h3 style={sectionTitleStyle}>Query Type</h3>
             {(stats.queryTypes || []).length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {stats.queryTypes.map((qt) => {
@@ -222,27 +203,28 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No query types data</div>
+              <div></div>
             )}
           </div>
 
           <div style={sectionCardStyle}>
-            <h3 style={sectionTitleStyle}>📡 Channels</h3>
+            <h3 style={sectionTitleStyle}> Source</h3>
             {(stats.channels || []).length > 0 ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px' }}>
                 {stats.channels.map((channel) => {
                   const colors = {
                     whatsapp: '#25d366',
-                    outlook: '#0078d4',
+                    email: '#0078d4',
                     webchat: '#6366f1',
                   };
                   const icons = {
-                    whatsapp: '💬',
-                    outlook: '📧',
+                    whatsapp: 'https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png',
+                    email: 'https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Email.png',
                     webchat: '🌐',
                   };
                   const color = colors[channel._id?.toLowerCase()] || '#6366f1';
                   const icon = icons[channel._id?.toLowerCase()] || '📨';
+                  const isImageIcon = icon.startsWith('https://');
                   return (
                     <div
                       key={channel._id}
@@ -254,7 +236,11 @@ export default function Dashboard() {
                         textAlign: 'center',
                       }}
                     >
-                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>{icon}</div>
+                      {isImageIcon ? (
+                        <img src={icon} alt={channel._id} style={{ width: '32px', height: '32px', marginBottom: '8px', objectFit: 'contain' }} />
+                      ) : (
+                        <div style={{ fontSize: '28px', marginBottom: '8px' }}>{icon}</div>
+                      )}
                       <div style={{ fontSize: '32px', fontWeight: 800, color, lineHeight: 1 }}>{channel.count}</div>
                       <div style={{ fontSize: '13px', color: '#64748b', marginTop: '8px', textTransform: 'capitalize' }}>
                         {channel._id}

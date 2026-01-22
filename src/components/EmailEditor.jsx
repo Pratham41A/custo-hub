@@ -22,7 +22,7 @@ const formats = [
   'link',
 ];
 
-export function EmailEditor({ value, onChange, placeholder = 'Email body...' }) {
+export function EmailEditor({ value, onChange, placeholder = '' }) {
   return (
     <div style={{ marginBottom: '16px' }}>
       <style>{`
@@ -30,10 +30,11 @@ export function EmailEditor({ value, onChange, placeholder = 'Email body...' }) 
           border: 1px solid rgba(0, 0, 0, 0.12);
           border-radius: 0 0 10px 10px;
           font-size: 14px;
-          min-height: 200px;
+          max-height: 106px;
+          overflow: auto;
         }
         .email-editor .ql-editor {
-          min-height: 180px;
+          min-height: 105px;
           padding: 12px 16px;
           font-family: inherit;
         }

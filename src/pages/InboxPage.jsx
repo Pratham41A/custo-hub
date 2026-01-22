@@ -3,6 +3,8 @@ import { useGlobalStore } from '../store/globalStore';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ContextPanel } from '../components/layout/ContextPanel';
 import { EmailEditor } from '../components/EmailEditor';
+import { OutlookEditor } from '../components/OutlookEditor';
+import { WhatsAppEditor } from '../components/WhatsAppEditor';
 import { MessageBubble } from '../components/MessageBubble';
 
 const formatDate = (date) => {
@@ -27,8 +29,27 @@ const statusFilters = [
 ];
 
 export default function InboxPage() {
+  // Timezone conversion helper - Convert IST datetime-local input to UTC ISO string
+  const convertISTtoUTC = (istDateTimeString) => {
+    if (!istDateTimeString) return null;
+    // istDateTimeString format: "2026-01-22T14:30" (from datetime-local)
+    const date = new Date(istDateTimeString);
+    // IST is UTC+5:30, subtract to get UTC equivalent
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const utcTime = new Date(date.getTime() - istOffsetMs);
+    return utcTime.toISOString();
+  };
+
+  // Check if current UTC time is past the template time
+  const isTemplateTimeExpired = (templateTime) => {
+    if (!templateTime) return false;
+    const currentUTC = new Date();
+    const templateUTC = new Date(templateTime);
+    return currentUTC > templateUTC;
+  };
+
   const {
-    inboxes, messages, selectedInbox, setSelectedInbox, updateInboxStatus,
+    inboxes, messages, selectedInbox, setSelectedInbox, setInboxes, updateInboxStatus,
     activeFilter, setActiveFilter, loading, fetchInboxes, fetchMessages,
     sendWhatsappTemplate, sendWhatsappMessage, sendEmailReply, sendNewEmail, createNote,
     queryTypes, fetchQueryTypes,
@@ -41,10 +62,37 @@ export default function InboxPage() {
   const [sending, setSending] = useState(false);
   const [replyingToId, setReplyingToId] = useState(null);
   const [replyForm, setReplyForm] = useState({ body: '', template: '' });
+  const [hoveredInboxId, setHoveredInboxId] = useState(null);
   const messagesEndRef = useRef(null);
+  const messageRefsMap = useRef({});
 
   useEffect(() => { loadInboxes(); }, [activeFilter]);
-  useEffect(() => { fetchQueryTypes(); }, []);
+  useEffect(() => { fetchQueryTypes(); }, [fetchQueryTypes]);
+  
+  // Enable audio playback on user interaction
+  useEffect(() => {
+    const enableAudio = () => {
+      try {
+        // Import socketService and initialize its AudioContext
+        import('../services/socketService').then(({ socketService }) => {
+          socketService.initAudioContext();
+        });
+      } catch (error) {
+        // Audio initialization failed
+      }
+      // Remove listeners after first interaction
+      document.removeEventListener('click', enableAudio);
+      document.removeEventListener('keydown', enableAudio);
+    };
+    
+    document.addEventListener('click', enableAudio);
+    document.addEventListener('keydown', enableAudio);
+    
+    return () => {
+      document.removeEventListener('click', enableAudio);
+      document.removeEventListener('keydown', enableAudio);
+    };
+  }, []);
 
   const loadInboxes = async () => {
     try {
@@ -60,6 +108,32 @@ export default function InboxPage() {
   };
 
   const closeModal = () => setModal({ type: null, data: {} });
+
+  // Check if a string is HTML format
+  const isHtmlFormat = (text) => {
+    if (!text) return false;
+    return /<[^>]*>/.test(text);
+  };
+
+  // Extract plain text from HTML string
+  const getPlainTextFromHtml = (html) => {
+    if (!html) return '';
+    return html
+      .replace(/<[^>]*>/g, '') // Remove all HTML tags
+      .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+      .replace(/&lt;/g, '<') // Decode &lt;
+      .replace(/&gt;/g, '>') // Decode &gt;
+      .replace(/&amp;/g, '&') // Decode &amp;
+      .trim(); // Trim whitespace
+  };
+
+  // Scroll to a specific message when clicking on a reply quote
+  const handleScrollToMessage = (messageId) => {
+    const messageElement = messageRefsMap.current[messageId];
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   // Robust date parser: handles numeric timestamps, ISO strings only
   // Returns 0 for human-readable strings (e.g., "Jan 2, 6:03 AM") without explicit year,
@@ -96,7 +170,6 @@ export default function InboxPage() {
     // Try parsing updatedAt directly
     let t = parseDate(updated);
     if (t) {
-      console.log(`[parseDate direct] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | updatedAt="${updated}" | timestamp=${t} (${new Date(t).toISOString()})`);
       return t;
     }
     // If updatedAt is a human string without year, infer year from createdAt
@@ -112,20 +185,17 @@ export default function InboxPage() {
           if (parsedDate < createdDate) {
             withYear = Date.parse(`${updated} ${createdYear + 1}`);
             if (Number.isFinite(withYear)) {
-              console.log(`[year bumped] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | updatedAt="${updated}" | createdAt="${created}" | timestamp=${withYear} (${new Date(withYear).toISOString()})`);
               return withYear;
             }
           }
-          console.log(`[year inferred] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | updatedAt="${updated}" | createdAt="${created}" | timestamp=${withYear} (${new Date(withYear).toISOString()})`);
           return withYear;
         }
       } catch (e) {
-        console.log(`[error parsing]`, e);
+        // Error parsing date
       }
     }
     // Fallback to createdAt
     const fallback = parseDate(created);
-    console.log(`[fallback] ${item.owner?.fullname || item.owner?.name || 'Unknown'} | createdAt="${created}" | timestamp=${fallback} (${new Date(fallback).toISOString()})`);
     return fallback;
   };
 
@@ -144,35 +214,63 @@ export default function InboxPage() {
       return fullname.includes(search.toLowerCase());
     })
     .sort((a, b) => {
+      // First, sort by isUnread: unread inboxes come first
+      if (a.isUnread !== b.isUnread) {
+        return b.isUnread ? 1 : -1; // true (unread) comes before false (read)
+      }
+
+      // Then sort by status order
       const orderA = statusOrder[a.status] ?? 999;
       const orderB = statusOrder[b.status] ?? 999;
       if (orderA !== orderB) return orderA - orderB;
+
       // Within the same status group, sort by a reliable timestamp descending (latest first)
       const aTime = getItemTimestamp(a);
       const bTime = getItemTimestamp(b);
       const diff = bTime - aTime;
-      console.log(`[sort] ${b.owner?.fullname || b.owner?.name || 'Unknown'} (${bTime}) vs ${a.owner?.fullname || a.owner?.name || 'Unknown'} (${aTime}) → diff=${diff}`);
       return diff;
     });
 
   const inboxMessages = messages
-    .filter((m) => m.inboxId === selectedInbox?._id)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .filter((m) => m.inbox?._id === selectedInbox?._id)
+    .sort((a, b) => {
+      const timeA = new Date(a.messageDateTime || a.createdAt).getTime();
+      const timeB = new Date(b.messageDateTime || b.createdAt).getTime();
+      return timeA - timeB; // Oldest first (ascending) - latest at bottom
+    });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [inboxMessages]);
 
   const handleInboxClick = async (inbox) => {
+    // Toggle selection: if clicking same inbox, deselect and hide panel
+    if (selectedInbox?._id === inbox._id) {
+      setSelectedInbox(null);
+      setShowContextPanel(false);
+      return;
+    }
+    
+    // Select new inbox and hide context panel by default
     setSelectedInbox(inbox);
-    setShowContextPanel(true);
+    setShowContextPanel(false);
     try {
-      await fetchMessages(inbox._id);
-      if (inbox.status === 'unread') {
-        await updateInboxStatus(inbox._id, 'read');
+      const msgData = await fetchMessages(inbox._id);
+      
+      // Mark as read if unread - use API response data
+      if (inbox.isUnread) {
+        // Call API and get updated inbox data from response
+        const updatedInboxData = await updateInboxStatus(inbox._id, 'read');
+        
+        // Update state with all fields returned from API
+        const updatedInboxes = inboxes.map(i =>
+          i._id === inbox._id ? { ...i, ...updatedInboxData } : i
+        );
+        setInboxes(updatedInboxes);
+        
         showToast('Marked as read', 'info');
       }
-    } catch {
+    } catch (error) {
       showToast('Failed to load messages', 'error');
     }
   };
@@ -195,16 +293,18 @@ export default function InboxPage() {
     } catch { showToast('Failed to resolve', 'error'); }
   };
 
-  const handleSendEmail = async () => {
-    if (!selectedInbox || !modal.data.subject || !modal.data.body) return;
-    const email = modal.data.email_address || selectedInbox.owner?.email;
+  const handleSendEmail = async (data = null) => {
+    const sendData = data || modal.data;
+    if (!selectedInbox || !sendData.subject || !sendData.htmlBody) return;
+    const email = sendData.email || selectedInbox.owner?.email || selectedInbox.owner?.dummyOwner?.name || selectedInbox.dummyOwner?.name;
     if (!email) {
       showToast('Email address not found', 'error');
+      console.error('Email lookup failed:', { sendData, owner: selectedInbox.owner, dummyOwner: selectedInbox.dummyOwner });
       return;
     }
     setSending(true);
     try {
-      await sendNewEmail(modal.data.subject, modal.data.body, email);
+      await sendNewEmail(email, sendData.subject, sendData.htmlBody);
       showToast('Email sent', 'success');
       closeModal();
       await fetchMessages(selectedInbox._id);
@@ -212,19 +312,23 @@ export default function InboxPage() {
     finally { setSending(false); }
   };
 
-  const handleSendWhatsApp = async () => {
-    if (!selectedInbox || !modal.data.template_name) return;
-    const mobile = modal.data.mobile_number || selectedInbox.owner?.mobile;
-    console.log('WhatsApp Send Debug:', { selectedInbox, mobile, template: modal.data.template_name });
+  const handleSendWhatsApp = async (data = null) => {
+    const sendData = data || modal.data;
+    if (!selectedInbox || !sendData.body && !sendData.template) return;
+    const mobile = sendData.mobile || selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobile;
     if (!mobile) {
       showToast('Mobile number not found', 'error');
+      console.error('Mobile lookup failed:', { sendData, owner: selectedInbox.owner, dummyOwner: selectedInbox.dummyOwner });
       return;
     }
     setSending(true);
     try {
-      console.log('Sending WhatsApp with:', { mobile, template: modal.data.template_name });
-      await sendWhatsappTemplate(mobile, modal.data.template_name);
-      showToast('WhatsApp template sent', 'success');
+      if (sendData.template) {
+        await sendWhatsappTemplate(mobile, sendData.template);
+      } else if (sendData.body) {
+        await sendWhatsappMessage(mobile, sendData.body);
+      }
+      showToast('WhatsApp message sent', 'success');
       closeModal();
       await fetchMessages(selectedInbox._id);
     } catch (error) {
@@ -242,18 +346,18 @@ export default function InboxPage() {
       const isWhatsApp = msg?.source === 'whatsapp';
       console.log('Reply Debug:', { isWhatsApp, msg, owner: selectedInbox.owner, ownerKeys: Object.keys(selectedInbox.owner || {}) });
       if (isWhatsApp && modal.data.template) {
-        const mobile = selectedInbox.owner?.mobile;
+        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobile;
         console.log('Owner object properties:', selectedInbox.owner);
         console.log('Sending WhatsApp template reply:', { mobile, template: modal.data.template });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappTemplate(mobile, modal.data.template);
       } else if (isWhatsApp && modal.data.body) {
-        const mobile = selectedInbox.owner?.mobile;
+        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobile;
         console.log('Sending WhatsApp message reply:', { mobile, body: modal.data.body });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappMessage(mobile, modal.data.body);
       } else if (modal.data.body) {
-        const email = selectedInbox.owner?.email;
+        const email = selectedInbox.owner?.email || selectedInbox.owner?.dummyOwner?.name || selectedInbox.dummyOwner?.name;
         console.log('Sending email reply:', { messageId: msg?.messageId, email });
         if (!email) throw new Error('Email not found');
         await sendEmailReply(msg?.messageId, modal.data.body, email);
@@ -269,7 +373,7 @@ export default function InboxPage() {
   };
 
   const handleInlineReply = async (message, isSendingEmail = false) => {
-    if (!selectedInbox || !replyForm.body) return;
+    if (!selectedInbox || (!replyForm.body && !replyForm.template)) return;
     setSending(true);
     try {
       const isWhatsApp = message?.source === 'whatsapp';
@@ -283,23 +387,34 @@ export default function InboxPage() {
             inbox: selectedInbox._id,
             body: replyForm.body,
           });
-          console.log('Web message reply sent via socket:', { inbox: selectedInbox._id, body: replyForm.body });
         } else {
           throw new Error('Socket connection not available');
         }
       } else if (isSendingEmail || !isWhatsApp) {
         // Send Email Reply
-        const email = selectedInbox.owner?.email;
+        const email = selectedInbox.owner?.email || selectedInbox.dummyOwner?.email || selectedInbox.dummyOwner?.name || selectedInbox.owner?.dummyOwner?.email;
         if (!email) throw new Error('Email not found');
         await sendEmailReply(message?.messageId, replyForm.body, email);
       } else {
         // Send WhatsApp Reply
-        const mobile = selectedInbox.owner?.mobile;
+        const mobile = selectedInbox.owner?.mobile || selectedInbox.owner?.mobileno;
         if (!mobile) throw new Error('Mobile number not found');
-        if (replyForm.template) {
-          await sendWhatsappTemplate(mobile, replyForm.template);
+        
+        // Check if current time is past template time
+        if (isTemplateTimeExpired(selectedInbox.whatsappConversationEndDateTime)) {
+          // Current time > Template time - send template
+          if (replyForm.template) {
+            await sendWhatsappTemplate(mobile, replyForm.template);
+          } else {
+            throw new Error('Template name required');
+          }
         } else {
-          await sendWhatsappMessage(mobile, replyForm.body);
+          // Current time <= Template time - send direct message
+          if (replyForm.body) {
+            await sendWhatsappMessage(mobile, replyForm.body);
+          } else {
+            throw new Error('Message body required');
+          }
         }
       }
       
@@ -319,14 +434,35 @@ export default function InboxPage() {
     if (!selectedInbox || !modal.data.noteBody || !modal.data.noteDueDate) return;
     setSending(true);
     try {
-      await createNote(selectedInbox.owner?._id, modal.data.noteBody, modal.data.noteDueDate);
+      // Convert IST datetime-local input to UTC ISO string for API
+      const utcDateTime = convertISTtoUTC(modal.data.noteDueDate);
+      await createNote(selectedInbox._id, modal.data.noteBody, utcDateTime);
       showToast('Note created', 'success');
       closeModal();
     } catch { showToast('Failed to create note', 'error'); }
     finally { setSending(false); }
   };
 
-  const getUser = (inbox) => inbox?.owner || {};
+  // Get display name from inbox - prioritize owner.fullname, then dummyOwner.name
+  const getDisplayName = (inbox) => {
+    // Handle owner object (can be string ID or full object)
+    let owner = inbox?.owner;
+    if (typeof owner === 'string') {
+      owner = null; // It's just an ID, skip it
+    }
+    
+    // Handle dummyOwner object (can be string ID or full object)
+    let dummyOwner = inbox?.dummyOwner;
+    if (typeof dummyOwner === 'string') {
+      dummyOwner = null; // It's just an ID, skip it
+    }
+    
+    const user = owner || dummyOwner || {};
+    const displayName = user.fullname || user.name || user.email || 'Unknown User';
+    return displayName;
+  };
+
+  const getUser = (inbox) => inbox?.owner || inbox?.dummyOwner || {};
   const canShowActions = selectedInbox && selectedInbox.status !== 'resolved';
   const isStarted = selectedInbox && ['started', 'pending'].includes(selectedInbox.status);
 
@@ -345,7 +481,7 @@ export default function InboxPage() {
   const chipStyle = (color) => ({ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: `${color}15`, color, textTransform: 'capitalize' });
   const messagePanelStyle = { flex: 1, display: 'flex', flexDirection: 'column', background: '#fafbfc' };
   const threadHeaderStyle = { height: '72px', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
-  const buttonStyle = (bg, color) => ({ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: bg === 'transparent' ? '1px solid rgba(0,0,0,0.15)' : 'none', background: bg, color, cursor: 'pointer', transition: 'all 0.2s' });
+  const buttonStyle = (bg, color) => ({ display: 'inline-flex', alignItems: 'center', padding: '5px 5px', borderRadius: '5px', fontSize: '10px', fontWeight: 600, border: bg === 'transparent' ? '1px solid rgba(0,0,0,0.15)' : 'none', background: bg, color, cursor: 'pointer', transition: 'all 0.2s' });
   const messageStyle = (isOutgoing) => ({ maxWidth: '70%', marginBottom: '16px', marginLeft: isOutgoing ? 'auto' : 0, padding: '16px', borderRadius: '16px', background: isOutgoing ? '#6366f1' : '#fff', color: isOutgoing ? '#fff' : '#0f172a', boxShadow: isOutgoing ? '0 4px 12px rgba(99, 102, 241, 0.3)' : '0 2px 8px rgba(0,0,0,0.08)' });
   const modalOverlayStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 };
   const modalStyle = { background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', overflow: 'hidden' };
@@ -363,16 +499,8 @@ export default function InboxPage() {
         {/* Inbox List */}
         <div style={listPanelStyle}>
           <div style={listHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 700 }}>Inbox</h2>
-              <button style={buttonStyle('transparent', '#374151')} onClick={loadInboxes} disabled={loading.inboxes}>
-                {loading.inboxes ? <span className="spinner" /> : '🔄'}
-              </button>
-            </div>
-            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>{filteredInboxes.length} conversations</p>
             <input
               type="text"
-              placeholder="Search by name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ ...inputStyle, marginBottom: '12px' }}
@@ -390,9 +518,7 @@ export default function InboxPage() {
             {loading.inboxes ? (
               <div style={{ textAlign: 'center', padding: '40px' }}><span className="spinner" /></div>
             ) : filteredInboxes.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
-                <div style={{ fontSize: '48px', marginBottom: '12px' }}>📭</div>
-                <div>No conversations found</div>
+              <div >
               </div>
             ) : (
               filteredInboxes.map((inbox) => {
@@ -400,26 +526,139 @@ export default function InboxPage() {
                 const isSelected = selectedInbox?._id === inbox._id;
                 const initials = (user.fullname || user.name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2);
                 const channelColor = inbox.source === 'whatsapp' ? '#25d366' : '#3b82f6';
+                const statusColor = getStatusColor(inbox.status);
+                
                 return (
-                  <div key={inbox._id} style={inboxItemStyle(isSelected, inbox.status === 'unread')} onClick={() => handleInboxClick(inbox)}>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div 
+                    key={inbox._id} 
+                    onClick={() => handleInboxClick(inbox)}
+                    style={{
+                      padding: '14px 16px',
+                      marginBottom: '10px',
+                      borderRadius: '12px',
+                      background: isSelected ? 'rgba(99, 102, 241, 0.08)' : inbox.isUnread ? '#fef9e7' : '#fff',
+                      border: isSelected ? '2px solid #6366f1' : inbox.isUnread ? '1px solid #fcd34d' : '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: isSelected ? '0 4px 12px rgba(99, 102, 241, 0.15)' : inbox.isUnread ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                      display: 'flex',
+                      gap: '14px',
+                      alignItems: 'flex-start'
+                    }}
+                    onMouseEnter={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.isUnread ? '0 4px 12px rgba(252, 211, 77, 0.3)' : '0 2px 8px rgba(0,0,0,0.1)')}
+                    onMouseLeave={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.isUnread ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)')}
+                  >
+                    {/* Avatar with Channel Icon */}
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
                       <div style={avatarStyle(channelColor)}>{initials}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', minWidth: 0, flex: 1 }}>
-                            <span style={{ flexShrink: 0 }}>{inbox.source === 'whatsapp' ? '💬' : '📧'}</span>
-                            <span style={{ fontWeight: inbox.status === 'unread' ? 700 : 600, fontSize: '14px', wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                              {user.fullname || user.name || 'Unknown User'}
-                            </span>
-                          </div>
-                          <span style={{ ...chipStyle(getStatusColor(inbox.status)), flexShrink: 0 }}>{inbox.status}</span>
-                        </div>
-                        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '8px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {inbox.preview || 'No preview available'}
-                        </p>
-                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>{formatDate(inbox.updatedAt)}</span>
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          bottom: '-4px',
+                          right: '-4px',
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '6px',
+                          background: '#fff',
+                          border: '2px solid #e2e8f0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        {inbox.source === 'whatsapp' ? (
+                          <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" alt="WhatsApp" style={{ width: '14px', height: '14px', objectFit: 'contain' }} />
+                        ) : inbox.source === 'email' ? (
+                          <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Email.png" alt="Email" style={{ width: '14px', height: '14px', objectFit: 'contain' }} />
+                        ) : (
+                          <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 'bold' }}></span>
+                        )}
                       </div>
                     </div>
+
+                    {/* Card Content */}
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {/* Top Row: Name and Status */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                        <span 
+                          style={{
+                            fontWeight: inbox.isUnread ? 700 : 600,
+                            fontSize: '13px',
+                            color: '#0f172a',
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {getDisplayName(inbox)}
+                        </span>
+                        <span
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            background: `${statusColor}15`,
+                            color: statusColor,
+                            textTransform: 'capitalize',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {inbox.status}
+                        </span>
+                      </div>
+
+                      {/* Middle Row: Preview */}
+                      <div 
+                        style={{
+                          fontSize: '12px',
+                          color: inbox.isUnread ? '#7c2d12' : '#64748b',
+                          fontWeight: inbox.isUnread ? 500 : 400,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          cursor: 'default'
+                        }}
+                        title={isHtmlFormat(inbox.preview) ? getPlainTextFromHtml(inbox.preview) : (inbox.preview || 'No preview available')}
+                      >
+                        {isHtmlFormat(inbox.preview) ? (
+                          <div
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              display: 'inline'
+                            }}
+                            dangerouslySetInnerHTML={{
+                              __html: inbox.preview
+                            }}
+                          />
+                        ) : (
+                          inbox.preview || 'No preview available'
+                        )}
+                      </div>
+
+                      {/* Bottom Row: DateTime */}
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        {formatDate(inbox.inboxDateTime)}
+                      </span>
+                    </div>
+
+                    {/* Unread Indicator */}
+                    {inbox.isUnread && (
+                      <div 
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#f59e0b',
+                          flexShrink: 0,
+                          marginTop: '6px'
+                        }}
+                      />
+                    )}
                   </div>
                 );
               })
@@ -439,23 +678,31 @@ export default function InboxPage() {
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '15px' }}>{getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'Unknown User'}</div>
                     <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {selectedInbox.source === 'whatsapp' ? '💬' : '📧'}
-                      {getUser(selectedInbox).email || getUser(selectedInbox).mobile}
                     </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={chipStyle(getStatusColor(selectedInbox.status))}>{selectedInbox.status}</span>
+    
                   {canShowActions && (
                     <>
                       {!isStarted ? (
-                        <button style={buttonStyle('#10b981', '#fff')} onClick={handleStart}>▶️ Start</button>
+                        <button style={buttonStyle('#000000', '#ffffff')} onClick={handleStart}>Start</button>
                       ) : (
-                        <button style={buttonStyle('transparent', '#10b981')} onClick={() => setModal({ type: 'resolve', data: {} })}>✅ Resolve</button>
+                        <button style={buttonStyle('#000000', '#fbfbfb')} onClick={() => setModal({ type: 'resolve', data: {} })}>Resolve</button>
                       )}
                     </>
                   )}
-                  <button style={buttonStyle('transparent', '#374151')} onClick={() => setModal({ type: 'note', data: {} })}>📝 Add Note</button>
+               
+                  <button style={buttonStyle('transparent', '#374151')} onClick={() => setModal({ type: 'note', data: {} })}>Add Note</button>
+                     {!showContextPanel && (
+                    <button 
+                      style={buttonStyle('transparent', '#374151')} 
+                      onClick={() => setShowContextPanel(true)}
+                      title="Show customer details"
+                    >
+                      👤 
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -465,13 +712,20 @@ export default function InboxPage() {
                 ) : (
                   <>
                     {inboxMessages.map((msg) => (
-                      <MessageBubble
+                      <div 
                         key={msg._id}
-                        msg={msg}
-                        allMessages={inboxMessages}
-                        isStarted={isStarted}
-                        onReply={(messageId) => setReplyingToId(replyingToId === messageId ? null : messageId)}
-                      />
+                        ref={(el) => {
+                          if (el) messageRefsMap.current[msg._id] = el;
+                        }}
+                      >
+                        <MessageBubble
+                          msg={msg}
+                          allMessages={inboxMessages}
+                          isStarted={isStarted}
+                          onReply={(messageId) => setReplyingToId(replyingToId === messageId ? null : messageId)}
+                          onScrollToMessage={handleScrollToMessage}
+                        />
+                      </div>
                     ))}
                     <div ref={messagesEndRef} />
                   </>
@@ -482,49 +736,49 @@ export default function InboxPage() {
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', padding: '16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {/* Inline Reply Form - Shows when reply button is clicked */}
                   {replyingToId && (
-                    <div style={{ borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '16px', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', color: '#6366f1' }}>↩️ Reply</div>
+                    <div style={{ 
+                      borderRadius: '12px', 
+                      border: '1px solid rgba(99, 102, 241, 0.3)', 
+                      padding: '16px', 
+                      background: 'rgba(99, 102, 241, 0.04)', 
+                      height: inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' && isTemplateTimeExpired(selectedInbox?.whatsappConversationEndDateTime) ? '150px' : '230px',
+                      overflow: 'auto' 
+                    }}>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
                       
                       {/* Get the message being replied to */}
                       {inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' ? (
                         <>
-                          <div style={{ marginBottom: '12px' }}>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Mobile Number</div>
-                            <input
-                              type="text"
-                              style={inputStyle}
-                              placeholder="Mobile number"
-                              value={selectedInbox.owner?.mobile || ''}
-                              readOnly
-                            />
-                          </div>
-                          <div style={{ marginBottom: '12px' }}>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Template Name (Optional)</div>
-                            <input
-                              type="text"
-                              style={inputStyle}
-                              placeholder="Template name (for outside 24h window)"
-                              value={replyForm.template || ''}
-                              onChange={(e) => setReplyForm({ ...replyForm, template: e.target.value })}
-                            />
-                          </div>
-                          <div style={{ marginBottom: '12px' }}>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Message Body</div>
-                            <textarea
-                              style={textareaStyle}
-                              placeholder="Message (within 24h window)"
-                              value={replyForm.body || ''}
-                              onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
-                            />
-                          </div>
+                          {isTemplateTimeExpired(selectedInbox?.whatsappConversationEndDateTime) ? (
+                            // Current time > Template time - show Template Name input
+                            <div style={{  }}>
+                              <input
+                                type="text"
+                                style={inputStyle}
+                                placeholder="Template Name"
+                                value={replyForm.template || ''}
+                                onChange={(e) => setReplyForm({ ...replyForm, template: e.target.value })}
+                              />
+                            </div>
+                          ) : (
+                            // Current time <= Template time - show Reply input
+                            <div style={{  }}>
+                              
+                              <textarea
+                                style={textareaStyle}
+                               value={replyForm.body || ''}
+                                onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                              />
+                            </div>
+                          )}
                         </>
                       ) : inboxMessages.find(m => m._id === replyingToId)?.source === 'web' ? (
                         <>
                           <div style={{ marginBottom: '12px' }}>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Reply Message</div>
+                            
                             <textarea
                               style={textareaStyle}
-                              placeholder="Type your reply..."
+                             
                               value={replyForm.body || ''}
                               onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
                             />
@@ -533,21 +787,10 @@ export default function InboxPage() {
                       ) : (
                         <>
                           <div style={{ marginBottom: '12px' }}>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Email Address</div>
-                            <input
-                              type="email"
-                              style={inputStyle}
-                              placeholder="Email address"
-                              value={selectedInbox.owner?.email || ''}
-                              readOnly
-                            />
-                          </div>
-                          <div style={{ marginBottom: '12px' }}>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Reply Message</div>
                             <EmailEditor
                               value={replyForm.body || ''}
                               onChange={(value) => setReplyForm({ ...replyForm, body: value })}
-                              placeholder="Your reply..."
+               
                             />
                           </div>
                         </>
@@ -555,7 +798,7 @@ export default function InboxPage() {
 
                       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                         <button
-                          style={buttonStyle('transparent', '#374151')}
+                          style={buttonStyle('transparent', '#050c18')}
                           onClick={() => {
                             setReplyingToId(null);
                             setReplyForm({ body: '', template: '' });
@@ -571,7 +814,7 @@ export default function InboxPage() {
                           }}
                           disabled={sending}
                         >
-                          {sending ? <span className="spinner spinner-white" /> : '📤 Send Reply'}
+                          {sending ? <span className="spinner spinner-white" /> : 'Reply'}
                         </button>
                       </div>
                     </div>
@@ -583,17 +826,15 @@ export default function InboxPage() {
                       📧 Compose Email
                     </button>
                     <button style={buttonStyle('#25d366', '#fff')} onClick={() => setModal({ type: 'whatsapp', data: { mobile_number: selectedInbox.owner?.mobile || '', template_name: '' } })}>
-                      💬 Compose WhatsApp
+                      <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" alt="WhatsApp" style={{ width: '18px', height: '18px', objectFit: 'contain' }} /> Compose WhatsApp
                     </button>
                   </div>
                 </div>
               )}
             </>
           ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-              <div style={{ fontSize: '64px', marginBottom: '16px' }}>💬</div>
-              <div style={{ fontSize: '18px', fontWeight: 500 }}>Select a conversation</div>
-              <div style={{ fontSize: '14px' }}>Choose an inbox item to view the conversation</div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#000000' }}>
+              <div style={{ fontSize: '50px', fontWeight: 500 }}>OnferenceTV</div>
             </div>
           )}
         </div>
@@ -607,15 +848,42 @@ export default function InboxPage() {
       {modal.type === 'note' && (
         <div style={modalOverlayStyle} onClick={closeModal}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeaderStyle}>Create Note</div>
+            <div style={modalHeaderStyle}> Add Note</div>
             <div style={modalBodyStyle}>
-              <textarea style={textareaStyle} placeholder="Enter note..." value={modal.data.noteBody || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteBody: e.target.value } })} />
-              <input type="text" style={inputStyle} placeholder="Due date (e.g., 27 jan 2026)" value={modal.data.noteDueDate || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteDueDate: e.target.value } })} />
+              {/* Note Body */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '8px', display: 'block' }}>Note</label>
+                <textarea 
+                  style={{ ...textareaStyle, borderColor: '#cbd5e1', borderWidth: '1.5px', fontFamily: 'inherit', fontSize: '14px' }} 
+                  value={modal.data.noteBody || ''} 
+                  onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteBody: e.target.value } })} 
+                />
+              </div>
+
+              {/* Due Date DateTime Picker */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '8px', display: 'block' }}>Due Date </label>
+                <div style={{ position: 'relative', borderRadius: '10px', border: '1.5px solid #cbd5e1', overflow: 'hidden', background: '#fff', transition: 'all 0.2s ease' }}>
+                  <input 
+                    type="datetime-local" 
+                    style={{ width: '100%', padding: '12px 14px', border: 'none', fontSize: '14px', outline: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }} 
+                    value={modal.data.noteDueDate || ''} 
+                    onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteDueDate: e.target.value } })} 
+                  />
+                </div>
+
+                {/* Display selected datetime info */}
+
+              </div>
             </div>
             <div style={modalFooterStyle}>
               <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
-              <button style={buttonStyle('#6366f1', '#fff')} onClick={handleCreateNote} disabled={sending}>
-                {sending ? <span className="spinner spinner-white" /> : 'Create Note'}
+              <button 
+                style={buttonStyle('#6366f1', '#fff')} 
+                onClick={handleCreateNote} 
+                disabled={sending || !modal.data.noteBody || !modal.data.noteDueDate}
+              >
+                {sending ? <span className="spinner spinner-white" /> : 'Add'}
               </button>
             </div>
           </div>
@@ -627,24 +895,30 @@ export default function InboxPage() {
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>Resolve Conversation</div>
             <div style={modalBodyStyle}>
-              <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
-                <option value="">Select Query Type</option>
-                {queryTypes.length > 0 ? (
-                  queryTypes.map((qt) => (
-                    <option key={qt._id || qt.name || qt} value={qt.name || qt}>
-                      {qt.name || qt}
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="Technical Support">Technical Support</option>
-                    <option value="Billing Query">Billing Query</option>
-                    <option value="General Inquiry">General Inquiry</option>
-                    <option value="Feature Request">Feature Request</option>
-                  </>
-                )}
-              </select>
-              <input type="text" style={inputStyle} placeholder="Or enter custom query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+              {queryTypes.length > 0 ? (
+                <>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Select Query Type</div>
+                    <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
+                      <option value="">Select Query Type</option>
+                      {queryTypes.map((qt) => (
+                        <option key={qt._id || qt.name || qt} value={qt.name || qt}>
+                          {qt.name || qt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Or Enter Custom Query Type</div>
+                    <input type="text" style={inputStyle} placeholder="Custom query type (optional)" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Enter Query Type</div>
+                  <input type="text" style={inputStyle} placeholder="Enter query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                </>
+              )}
             </div>
             <div style={modalFooterStyle}>
               <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
@@ -656,41 +930,30 @@ export default function InboxPage() {
 
       {modal.type === 'email' && (
         <div style={modalOverlayStyle} onClick={closeModal}>
-          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeaderStyle}>Compose Email</div>
-            <div style={modalBodyStyle}>
-              <input type="email" style={inputStyle} placeholder="Email address" value={modal.data.email_address || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, email_address: e.target.value } })} />
-              <input type="text" style={inputStyle} placeholder="Subject" value={modal.data.subject || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, subject: e.target.value } })} />
-              <EmailEditor
-                value={modal.data.body || ''}
-                onChange={(value) => setModal({ ...modal, data: { ...modal.data, body: value } })}
-                placeholder="Email body..."
-              />
-            </div>
-            <div style={modalFooterStyle}>
-              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
-              <button style={buttonStyle('#3b82f6', '#fff')} onClick={handleSendEmail} disabled={sending}>
-                {sending ? <span className="spinner spinner-white" /> : '📧 Send Email'}
-              </button>
-            </div>
+          <div style={{ ...modalStyle, maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
+            <OutlookEditor
+              isReply={false}
+              recipientEmail={selectedInbox?.owner?.email || selectedInbox?.owner?.dummyOwner?.name || selectedInbox?.dummyOwner?.name || ''}
+              onSend={(data) => {
+                handleSendEmail(data);
+              }}
+              onCancel={closeModal}
+            />
           </div>
         </div>
       )}
 
       {modal.type === 'whatsapp' && (
         <div style={modalOverlayStyle} onClick={closeModal}>
-          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeaderStyle}>Compose WhatsApp</div>
-            <div style={modalBodyStyle}>
-              <input type="tel" style={inputStyle} placeholder="Mobile number" value={modal.data.mobile_number || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, mobile_number: e.target.value } })} />
-              <input type="text" style={inputStyle} placeholder="Template name (e.g., t1)" value={modal.data.template_name || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, template_name: e.target.value } })} />
-            </div>
-            <div style={modalFooterStyle}>
-              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
-              <button style={buttonStyle('#25d366', '#fff')} onClick={handleSendWhatsApp} disabled={sending}>
-                {sending ? <span className="spinner spinner-white" /> : '💬 Send WhatsApp'}
-              </button>
-            </div>
+          <div style={{ ...modalStyle, maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <WhatsAppEditor
+              isReply={false}
+              recipientMobile={selectedInbox?.owner?.mobileno || selectedInbox?.owner?.mobile || selectedInbox?.owner?.dummyOwner?.mobile || selectedInbox?.dummyOwner?.mobile || ''}
+              onSend={(data) => {
+                handleSendWhatsApp(data);
+              }}
+              onCancel={closeModal}
+            />
           </div>
         </div>
       )}
@@ -706,7 +969,7 @@ export default function InboxPage() {
                   <textarea style={textareaStyle} placeholder="Or direct message (within 24h window)" value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
                 </>
               ) : (
-                <textarea style={textareaStyle} placeholder="Your reply..." value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
+                <textarea style={textareaStyle} value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
               )}
             </div>
             <div style={modalFooterStyle}>

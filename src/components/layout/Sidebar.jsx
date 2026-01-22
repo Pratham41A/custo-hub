@@ -1,8 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom';
 
 const navItems = [
-  { path: '/', icon: '📊', label: 'Dashboard' },
-  { path: '/inbox', icon: '📥', label: 'Inbox' },
+  { path: '/', icon: '', label: 'Dashboard' },
+  { path: '/inbox', icon: '', label: 'Inbox' },
 ];
 
 export function Sidebar() {
@@ -95,26 +95,8 @@ export function Sidebar() {
 
   return (
     <aside style={sidebarStyle}>
-      <div style={logoSectionStyle}>
-        <div style={logoBoxStyle}>
-          <img 
-            src="/images/onfnewlogo.png" 
-            alt="Onference" 
-            style={{ height: '28px', width: 'auto', filter: 'brightness(1.1)' }} 
-          />
-        </div>
-        <div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: '16px', letterSpacing: '-0.01em' }}>
-            Onference
-          </div>
-          <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Support Hub
-          </div>
-        </div>
-      </div>
 
       <nav style={navStyle}>
-        <span style={menuLabelStyle}>Main Menu</span>
         <ul style={{ listStyle: 'none' }}>
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
@@ -131,14 +113,7 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      <div style={footerStyle}>
-        <div style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '11px', marginBottom: '4px' }}>
-          Need help?
-        </div>
-        <div style={{ color: '#818cf8', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}>
-          View Documentation →
-        </div>
-      </div>
+     
     </aside>
   );
 }

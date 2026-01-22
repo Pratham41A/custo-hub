@@ -1,4 +1,4 @@
-const BASE_URL = 'https://sadmin-api.onference.in';
+const BASE_URL = 'https://internal-product-backend.onrender.com';
 
 class ApiService {
   async request(endpoint, options = {}) {
@@ -28,110 +28,111 @@ class ApiService {
     }
   }
 
-  // Dashboard - GET /support/dashboards
+  // Dashboard - GET /dashboards
   async getDashboards() {
-    return this.request('/support/dashboards');
+    return this.request('/dashboards');
   }
 
-  // Inboxes - POST /support/inboxes
+  // Inboxes - GET /inboxes/:status (pass empty string or omit for all)
   async getInboxes({ status = '', limit = 20, skip = 0, startDate = '', endDate = '' } = {}) {
-    return this.request('/support/inboxes', {
-      method: 'POST',
-      body: { status, limit, skip, startDate, endDate },
+    const endpoint = status ? `/inboxes/${status}` : '/inboxes';
+    return this.request(endpoint, {
+      method: 'GET',
     });
   }
 
-  // Update Inbox - POST /support/inbox
-  async updateInbox({ inboxId, type, queryTypes = '', status = '', preview = '' }) {
-    return this.request('/support/inbox', {
-      method: 'POST',
-      body: { inboxId, type, query_types: queryTypes, status, preview },
+  // Update Inbox - PATCH /inbox/:inboxId
+  async updateInbox({ inboxId, status, queryType = '' }) {
+    return this.request(`/inbox/${inboxId}`, {
+      method: 'PATCH',
+      body: { inboxId, status, queryType },
     });
   }
 
-  // Messages - POST /support/messages
+  // Messages - GET /messages/:inboxId
   async getMessages(inboxId) {
-    return this.request('/support/messages', {
-      method: 'POST',
-      body: { inboxId },
-    });
+    return this.request(`/messages/${inboxId}`);
   }
 
-  // WhatsApp - POST /support/whatsapp/template
+  // WhatsApp - POST /whatsapp/template
   async sendWhatsappTemplate(mobile, template) {
-    return this.request('/support/whatsapp/template', {
+    return this.request('/whatsapp/template', {
       method: 'POST',
       body: { mobile, template },
     });
   }
 
-  // WhatsApp - POST /support/whatsapp/new
+  // WhatsApp - POST /whatsapp/new
   async sendWhatsappMessage(mobile, body) {
-    return this.request('/support/whatsapp/new', {
+    return this.request('/whatsapp/new', {
       method: 'POST',
       body: { mobile, body },
     });
   }
 
-  // Outlook Reply - POST /support/outlook/reply
-  async sendEmailReply(replyMessageId, body, email) {
-    return this.request('/support/outlook/reply', {
+  // Outlook Reply - POST /outlook/reply
+  async sendEmailReply(replyMessageId, htmlBody, email) {
+    return this.request('/outlook/reply', {
       method: 'POST',
-      body: { replyMessageId, body, email },
+      body: { replyMessageId, htmlBody, email },
     });
   }
 
-  // Outlook New - POST /support/outlook/new
-  async sendNewEmail(subject, body, email) {
-    return this.request('/support/outlook/new', {
+  // Outlook New - POST /outlook/new
+  async sendNewEmail(email, subject, htmlBody) {
+    return this.request('/outlook/new', {
       method: 'POST',
-      body: { subject, body, email },
+      body: { email, subject, htmlBody },
     });
   }
 
-  // Subscriptions - POST /support/subscriptions
-  async getSubscriptions(userid, limit = 10) {
-    return this.request('/support/subscriptions', {
-      method: 'POST',
-      body: { userid, limit },
+  // Subscriptions - GET /subscriptions/:userId
+  async getSubscriptions(userId, limit = 10) {
+    return this.request(`/subscriptions/${userId}`, {
+      method: 'GET',
     });
   }
 
-  // Payments - POST /support/payments
-  async getPayments(userid, limit = 10) {
-    return this.request('/support/payments', {
-      method: 'POST',
-      body: { userid, limit },
+  // Payments - GET /payments/:userId
+  async getPayments(userId, limit = 10) {
+    return this.request(`/payments/${userId}`, {
+      method: 'GET',
     });
   }
 
-  // Views - POST /support/views
-  async getViews(userid, limit = 10) {
-    return this.request('/support/views', {
-      method: 'POST',
-      body: { userid, limit },
+  // Views - GET /views/:userId
+  async getViews(userId, limit = 10) {
+    return this.request(`/views/${userId}`, {
+      method: 'GET',
     });
   }
 
-  // Activities/Notes - POST /support/activities
-  async getActivities(userid, limit = 10) {
-    return this.request('/support/activities', {
-      method: 'POST',
-      body: { userid, limit },
+  // Activities - GET /activities/:userId
+  async getActivities(inboxId, limit = 10) {
+    return this.request(`/activities/${inboxId}`, {
+      method: 'GET',
     });
   }
 
-  // Create Activity/Note - POST /support/activity
-  async createActivity(owner, body, dueDate) {
-    return this.request('/support/activity', {
+  // Create Activity - POST /activity
+  async createActivity(inboxId, body, dueDate) {
+    return this.request('/activity', {
       method: 'POST',
-      body: { owner, body, due_date: dueDate },
+      body: { inboxId, body, dueDate },
     });
   }
 
-  // Fetch Query Types - GET /support/fetchQueryTypes
+  // Query Types - GET /queryTypes (for dropdown options)
   async fetchQueryTypes() {
-    return this.request('/support/fetchQueryTypes');
+    return this.request('/queryTypes');
+  }
+
+  // Create Query Type - POST /queryType
+  async createQueryType(name) {
+    return this.request('/queryType', {
+      method: 'POST',
+      body: { name },
+    });
   }
 }
 

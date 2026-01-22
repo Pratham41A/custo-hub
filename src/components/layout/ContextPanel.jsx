@@ -22,18 +22,47 @@ export function ContextPanel({ inbox, onClose }) {
 
   if (!inbox) return null;
 
-  const user = inbox.owner || {};
-  const userId = user._id;
+  const user = inbox.owner || inbox.dummyOwner || {};
+  const inboxId = inbox._id;
+  const isOwner = !!inbox.owner;
+  
+  // Get display name - prioritize fullname, then name
+  const getDisplayName = () => user.fullname || user.name || 'Unknown User';
+
+  // Get user info fields to display
+  const getUserInfoFields = () => {
+    const fields = [];
+    
+    if (isOwner) {
+      // For Owner: email, fullname, mobileno, registeredFrom, interest, usercountry
+      if (user.email) fields.push({ label: 'Email', value: user.email, icon: '📧' });
+      if (user.fullname) fields.push({ label: 'Full Name', value: user.fullname, icon: '👤' });
+      if (user.mobile || user.mobileno) fields.push({ label: 'Mobile No.', value: user.mobile || user.mobileno, icon: '📱' });
+      if (user.registeredfrom || user.registeredFrom || user.registeryFrom) fields.push({ label: 'Registered From', value: user.registeredfrom || user.registeredFrom || user.registeryFrom, icon: '🌐' });
+      if (user.usercountry || user.user_country || user.country) fields.push({ label: 'Country', value: user.usercountry || user.user_country || user.country, icon: '🌍' });
+      if (user.interest && Array.isArray(user.interest) && user.interest.length > 0) {
+        const interests = user.interest.map(i => i.interests || i).join(', ');
+        fields.push({ label: 'Interests', value: interests, icon: '⭐' });
+      }
+    } else {
+      // For DummyOwner: name, email, mobileno
+      if (user.name) fields.push({ label: 'Name', value: user.name, icon: '👤' });
+      if (user.email) fields.push({ label: 'Email', value: user.email, icon: '📧' });
+      if (user.mobile || user.mobileno) fields.push({ label: 'Mobile No.', value: user.mobile || user.mobileno, icon: '📱' });
+    }
+    
+    return fields;
+  };
 
   const loadDataForModal = async (type) => {
-    if (!userId) return;
+    if (!inboxId) return;
     setLoadingData(true);
     try {
       let result;
-      if (type === 'subscription') result = await fetchUserSubscriptions(userId, 20);
-      if (type === 'payment') result = await fetchUserPayments(userId, 20);
-      if (type === 'view') result = await fetchUserViews(userId, 20);
-      if (type === 'notes') result = await fetchUserActivities(userId, 20);
+      if (type === 'subscription') result = await fetchUserSubscriptions(inboxId, 20);
+      if (type === 'payment') result = await fetchUserPayments(inboxId, 20);
+      if (type === 'view') result = await fetchUserViews(inboxId, 20);
+      if (type === 'notes') result = await fetchUserActivities(inboxId, 20);
       if (result?.pagination) setPagination(result.pagination);
     } finally {
       setLoadingData(false);
@@ -72,7 +101,7 @@ export function ContextPanel({ inbox, onClose }) {
     display: 'flex',
     height: '72px',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     borderBottom: '1px solid rgba(0,0,0,0.08)',
     padding: '0 24px',
   };
@@ -203,53 +232,36 @@ export function ContextPanel({ inbox, onClose }) {
     <>
       <aside style={panelStyle}>
         <div style={headerStyle}>
-          <span style={{ fontSize: '16px', fontWeight: 600 }}>Customer Details</span>
           <button style={closeButtonStyle} onClick={onClose}>✕</button>
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <div style={avatarStyle}>{initials}</div>
-            <div style={{ fontSize: '18px', fontWeight: 600 }}>{user.fullname || user.name || 'Unknown'}</div>
-            <div style={{ fontSize: '13px', color: '#64748b' }}>Customer</div>
+            <div style={{ fontSize: '18px', fontWeight: 600 }}>{getDisplayName()}</div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+              {isOwner ? 'Owner' : 'Guest'}
+            </div>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
-            {user.email && (
-              <div style={infoRowStyle}>
-                <span>📧</span>
-                <span style={{ fontSize: '14px' }}>{user.email}</span>
+            {getUserInfoFields().map((field, idx) => (
+              <div key={idx} style={infoRowStyle}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {field.label}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '2px', wordBreak: 'break-word' }}>
+                    {field.value}
+                  </div>
+                </div>
               </div>
-            )}
-            {user.mobile && (
-              <div style={infoRowStyle}>
-                <span>📱</span>
-                <span style={{ fontSize: '14px' }}>{user.mobile}</span>
-              </div>
-            )}
-            {user.location && (
-              <div style={infoRowStyle}>
-                <span>📍</span>
-                <span style={{ fontSize: '14px' }}>{user.location}</span>
-              </div>
-            )}
-            {user.speciality && (
-              <div style={infoRowStyle}>
-                <span>🏷️</span>
-                <span style={{ fontSize: '14px' }}>{user.speciality}</span>
-              </div>
-            )}
-            {user.device && (
-              <div style={infoRowStyle}>
-                <span>💻</span>
-                <span style={{ fontSize: '14px' }}>{user.device}</span>
-              </div>
-            )}
+            ))}
           </div>
 
           <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: '20px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '12px' }}>
-              Customer Data
+              Data
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
               {dataItems.map((item) => (
@@ -267,7 +279,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Subscriptions - {user.fullname || user.name} ({subscriptions.length})</span>
+              <span>Subscriptions - {getDisplayName()} ({subscriptions.length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -319,7 +331,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Payments - {user.fullname || user.name} ({payments.length})</span>
+              <span>Payments - {getDisplayName()} ({payments.length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -361,7 +373,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Views - {user.fullname || user.name} ({views.length})</span>
+              <span>Views - {getDisplayName()} ({Array.isArray(views) ? views.length : 0})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -380,7 +392,7 @@ export function ContextPanel({ inbox, onClose }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {views.map((v) => {
+                    {Array.isArray(views) && views.map((v) => {
                       const rawVal = v?.percentvideoplay;
                       const parsed = rawVal != null && rawVal !== '' ? Number(rawVal) : NaN;
                       const pct = !isNaN(parsed) ? parsed : null;
@@ -395,7 +407,7 @@ export function ContextPanel({ inbox, onClose }) {
                         </tr>
                       );
                     })}
-                    {views.length === 0 && (
+                    {(!Array.isArray(views) || views.length === 0) && (
                       <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No views</td></tr>
                     )}
                   </tbody>
@@ -411,7 +423,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={{ ...modalStyle, maxWidth: '1000px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Notes - {user.fullname || user.name} ({notes.length})</span>
+              <span>Notes - {getDisplayName()} ({Array.isArray(notes) ? notes.length : 0})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -427,14 +439,14 @@ export function ContextPanel({ inbox, onClose }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {notes.map((n) => (
+                    {Array.isArray(notes) && notes.map((n) => (
                       <tr key={n._id}>
                         <td style={tdStyle}>{n.body}</td>
-                        <td style={tdStyle}>{formatDate(n.due_date)}</td>
+                        <td style={tdStyle}>{formatDate(n.dueDate)}</td>
                         <td style={tdStyle}>{formatDate(n.createdAt)}</td>
                       </tr>
                     ))}
-                    {notes.length === 0 && (
+                    {(!Array.isArray(notes) || notes.length === 0) && (
                       <tr><td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No notes</td></tr>
                     )}
                   </tbody>
