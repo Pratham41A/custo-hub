@@ -1,41 +1,81 @@
 import { io } from 'socket.io-client';
 import { useGlobalStore } from '../store/globalStore';
 
-const SOCKET_URL = 'https://sadmin-api.onference.in';
+const SOCKET_URL = 'https://internal-product-backend.onrender.com';
 
 class SocketService {
   socket = null;
   isConnected = false;
+  audioContext = null;
+
+  initAudioContext() {
+    try {
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+    } catch (error) {
+      // Audio context initialization failed
+    }
+  }
 
   playNotificationSound() {
     try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
+      // Ensure AudioContext is initialized
+      if (!this.audioContext) {
+        this.initAudioContext();
+      }
+      
+      if (!this.audioContext) {
+        return;
+      }
+      
+      // Create oscillator
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
+      
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
+      gainNode.connect(this.audioContext.destination);
+      
       oscillator.frequency.value = 800;
       oscillator.type = 'sine';
-
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.5);
+      
+      gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.5);
+      
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + 0.5);
     } catch (error) {
-      console.warn('Could not play notification sound:', error);
+      // Notification sound failed
+    }
+  }
+
+  showNotificationAlert(title = 'New Message', message = 'You have a new message') {
+    try {
+      // Browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, {
+          body: message,
+          icon: '/robots.txt',
+          tag: 'message-notification',
+          requireInteraction: true,
+        });
+      }
+    } catch (error) {
+      // Notification alert failed
     }
   }
 
   connect() {
     if (this.socket?.connected) {
-      console.log('Socket already connected');
       return;
     }
 
-    console.log('Connecting to socket server:', SOCKET_URL);
+    // Initialize AudioContext on connect
+    this.initAudioContext();
 
     this.socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -45,76 +85,51 @@ class SocketService {
     });
 
     this.socket.on('connect', () => {
-      console.log('Socket connected:', this.socket.id);
       this.isConnected = true;
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
       this.isConnected = false;
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
+      // Socket connection error occurred
     });
 
-    // Listen for incoming messages
-    this.socket.on('message', (data) => {
-      console.log('Socket [message] received:', data);
-      
-      const store = useGlobalStore.getState();
-      if (data && data._id) {
-        store.handleMessageCreated({
-          _id: data._id,
-          inboxId: data.inboxId,
-          from: data.from,
-          to: data.to,
-          subject: data.subject,
-          body: data.body,
-          source: data.source,
-          type: data.type,
-          template: data.template,
-          inReplyTo: data.inReplyTo,
-          messageId: data.messageId,
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        });
-        console.log('Message added to state');
-      }
-    });
-
-    // Listen for inbox updates
+    // Listen for inbox updates - play notification and update state
     this.socket.on('inbox', (data) => {
-      console.log('Socket [inbox] received:', data);
       this.playNotificationSound();
+      this.showNotificationAlert('New Inbox', `New message received`);
       
       const store = useGlobalStore.getState();
       if (data && data._id) {
         // Check if inbox exists in state - update or add
         const existingInbox = store.inboxes.find(i => i._id === data._id);
         
+        // Prepare inbox data - merge with defaults for missing fields
+        let inboxData = {
+          ...data,
+          isUnread: data.isUnread !== undefined ? data.isUnread : true,
+          status: data.status || 'unread',
+          inboxDateTime: data.inboxDateTime || data.updatedAt || new Date().toISOString(),
+        };
+        
+        // If dummyOwner is just an ID (string), try to get it from existing inbox
+        if (typeof inboxData.dummyOwner === 'string' && existingInbox?.dummyOwner && typeof existingInbox.dummyOwner === 'object') {
+          inboxData.dummyOwner = existingInbox.dummyOwner;
+        }
+        
+        // If owner is just an ID (string), try to get it from existing inbox
+        if (typeof inboxData.owner === 'string' && existingInbox?.owner && typeof existingInbox.owner === 'object') {
+          inboxData.owner = existingInbox.owner;
+        }
+        
         if (existingInbox) {
-          // Update existing inbox
-          store.handleInboxUpdated({
-            _id: data._id,
-            owner: data.owner,
-            createdAt: data.createdAt,
-            preview: data.preview,
-            status: data.status,
-            updatedAt: data.updatedAt,
-          });
-          console.log('Inbox updated in state');
+          // Update existing inbox with all received data
+          store.handleInboxUpdated(inboxData);
         } else {
-          // Add new inbox
-          store.handleInboxCreated({
-            _id: data._id,
-            owner: data.owner,
-            createdAt: data.createdAt,
-            preview: data.preview,
-            status: data.status,
-            updatedAt: data.updatedAt,
-          });
-          console.log('New inbox added to state');
+          // Add new inbox with all received data
+          store.handleInboxCreated(inboxData);
         }
       }
     });

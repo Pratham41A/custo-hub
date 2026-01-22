@@ -95,6 +95,7 @@ export const useGlobalStore = create((set, get) => ({
       return messageList;
     } catch (error) {
       console.error('Failed to fetch messages:', error);
+      setMessages([]); // Clear messages on error
       throw error;
     } finally {
       setLoading('messages', false);
@@ -102,77 +103,85 @@ export const useGlobalStore = create((set, get) => ({
   },
 
   // Inbox Operations
-  updateInboxStatus: async (inboxId, status, queryTypes = '') => {
+  updateInboxStatus: async (inboxId, status, queryType = '') => {
     try {
-      await apiService.updateInbox({ 
+      // Call API and get the updated inbox response
+      const response = await apiService.updateInbox({ 
         inboxId, 
-        type: 'status', 
         status,
-        queryTypes,
+        queryType,
       });
+      
+      // Extract updated inbox from API response
+      const updatedInbox = response || {};
+      
       set((state) => ({
         inboxes: state.inboxes.map((inbox) =>
           inbox._id === inboxId 
-            ? { ...inbox, status, updatedAt: new Date().toISOString() } 
+            ? { ...inbox, ...updatedInbox } // Use all fields from API response
             : inbox
         ),
         selectedInbox: state.selectedInbox?._id === inboxId
-          ? { ...state.selectedInbox, status, updatedAt: new Date().toISOString() }
+          ? { ...state.selectedInbox, ...updatedInbox } // Use all fields from API response
           : state.selectedInbox,
       }));
-      return true;
+      return updatedInbox;
     } catch (error) {
-      console.error('Failed to update inbox status:', error);
       throw error;
     }
   },
 
   // User data fetching - matches API response format
-  fetchUserSubscriptions: async (userid, limit = 10) => {
+  fetchUserSubscriptions: async (userId) => {
     try {
-      const response = await apiService.getSubscriptions(userid, limit);
-      const subs = response.data || [];
+      const response = await apiService.getSubscriptions(userId);
+      const subs = response.data || response || [];
       set({ subscriptions: subs });
-      return { data: subs, pagination: response.pagination };
+      return { data: subs };
     } catch (error) {
       console.error('Failed to fetch subscriptions:', error);
-      return { data: [], pagination: null };
+      return { data: [] };
     }
   },
 
-  fetchUserPayments: async (userid, limit = 10) => {
+  fetchUserPayments: async (userId) => {
     try {
-      const response = await apiService.getPayments(userid, limit);
-      const payments = response.data || [];
+      const response = await apiService.getPayments(userId);
+      const payments = response.data || response || [];
       set({ payments });
-      return { data: payments, pagination: response.pagination };
+      return { data: payments };
     } catch (error) {
       console.error('Failed to fetch payments:', error);
-      return { data: [], pagination: null };
+      return { data: [] };
     }
   },
 
-  fetchUserViews: async (userid, limit = 10) => {
+  fetchUserViews: async (userId) => {
     try {
-      const response = await apiService.getViews(userid, limit);
-      const views = response.data || [];
+      const response = await apiService.getViews(userId);
+      const viewsData = response.data || response || [];
+      // Ensure views is always an array
+      const views = Array.isArray(viewsData) ? viewsData : [];
       set({ views });
-      return { data: views, pagination: response.pagination };
+      return { data: views };
     } catch (error) {
       console.error('Failed to fetch views:', error);
-      return { data: [], pagination: null };
+      return { data: [] };
     }
   },
 
-  fetchUserActivities: async (userid, limit = 10) => {
+  fetchUserActivities: async (inboxId) => {
     try {
-      const response = await apiService.getActivities(userid, limit);
-      const notes = response.data || [];
+      const response = await apiService.getActivities(inboxId);
+      // API returns { count, activities } or activities array directly
+      let notesData = response.activities || response.data || response || [];
+      // Ensure notes is always an array
+      const notes = Array.isArray(notesData) ? notesData : [];
       set({ notes });
-      return { data: notes, pagination: response.pagination };
+      return { data: notes };
     } catch (error) {
       console.error('Failed to fetch activities:', error);
-      return { data: [], pagination: null };
+      return { data: [] };
     }
   },
 
@@ -195,28 +204,28 @@ export const useGlobalStore = create((set, get) => ({
     }
   },
 
-  sendEmailReply: async (replyMessageId, body, email) => {
+  sendEmailReply: async (replyMessageId, htmlBody, email) => {
     try {
-      return await apiService.sendEmailReply(replyMessageId, body, email);
+      return await apiService.sendEmailReply(replyMessageId, htmlBody, email);
     } catch (error) {
       console.error('Failed to send email reply:', error);
       throw error;
     }
   },
 
-  sendNewEmail: async (subject, body, email) => {
+  sendNewEmail: async (email, subject, htmlBody) => {
     try {
-      return await apiService.sendNewEmail(subject, body, email);
+      return await apiService.sendNewEmail(email, subject, htmlBody);
     } catch (error) {
       console.error('Failed to send new email:', error);
       throw error;
     }
   },
 
-  // Note Operations - matches API format
-  createNote: async (owner, body, dueDate) => {
+  // Note Operations
+  createNote: async (inboxId, body, dueDate) => {
     try {
-      const result = await apiService.createActivity(owner, body, dueDate);
+      const result = await apiService.createActivity(inboxId, body, dueDate);
       set((state) => ({
         notes: [...state.notes, result],
       }));
@@ -231,12 +240,35 @@ export const useGlobalStore = create((set, get) => ({
   fetchQueryTypes: async () => {
     try {
       const response = await apiService.fetchQueryTypes();
-      const queryTypes = response.data || [];
+      let queryTypes = [];
+      // Handle response format: { count, queryTypes: [...] }
+      if (response.queryTypes && Array.isArray(response.queryTypes)) {
+        queryTypes = response.queryTypes;
+      } else if (Array.isArray(response)) {
+        queryTypes = response;
+      } else if (response.data && Array.isArray(response.data)) {
+        queryTypes = response.data;
+      }
       set({ queryTypes });
       return queryTypes;
     } catch (error) {
       console.error('Failed to fetch query types:', error);
       return [];
+    }
+  },
+
+  // Create Query Type
+  createQueryType: async (name) => {
+    try {
+      const response = await apiService.createQueryType(name);
+      const newQueryType = response.data || response;
+      set((state) => ({
+        queryTypes: [...state.queryTypes, newQueryType],
+      }));
+      return newQueryType;
+    } catch (error) {
+      console.error('Failed to create query type:', error);
+      throw error;
     }
   },
   
@@ -246,7 +278,7 @@ export const useGlobalStore = create((set, get) => ({
     
     if (dashboardData) {
       const statusKeys = ['unread', 'read', 'started', 'resolved'];
-      const channelKeys = ['whatsapp', 'outlook', 'webchat'];
+      const channelKeys = ['whatsapp', 'email', 'webchat'];
       
       // Extract channels
       const channels = channelKeys
@@ -280,7 +312,6 @@ export const useGlobalStore = create((set, get) => ({
   
   // Socket Event Handlers
   handleInboxUpdated: (inbox) => set((state) => {
-    console.log('Store: Updating inbox', inbox._id);
     return {
       inboxes: state.inboxes.map((i) => 
         i._id === inbox._id 
@@ -294,16 +325,20 @@ export const useGlobalStore = create((set, get) => ({
   }),
   
   handleInboxCreated: (inbox) => set((state) => {
-    console.log('Store: Adding new inbox', inbox._id);
     const exists = state.inboxes.some(i => i._id === inbox._id);
     if (exists) return state;
+    // Ensure new inboxes have isUnread set to true
+    const newInbox = {
+      ...inbox,
+      isUnread: inbox.isUnread !== undefined ? inbox.isUnread : true,
+      status: inbox.status || 'unread',
+    };
     return {
-      inboxes: [inbox, ...state.inboxes],
+      inboxes: [newInbox, ...state.inboxes],
     };
   }),
   
   handleMessageCreated: (message) => set((state) => {
-    console.log('Store: Adding new message', message._id);
     const exists = state.messages.some(m => m._id === message._id);
     if (exists) return state;
     return {
