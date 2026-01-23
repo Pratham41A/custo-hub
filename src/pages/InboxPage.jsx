@@ -63,6 +63,8 @@ export default function InboxPage() {
   const [replyingToId, setReplyingToId] = useState(null);
   const [replyForm, setReplyForm] = useState({ body: '', template: '' });
   const [hoveredInboxId, setHoveredInboxId] = useState(null);
+  const [composingType, setComposingType] = useState(null);
+  const [composeForm, setComposeForm] = useState({ email: '', subject: '', body: '', mobile: '', template: '' });
   const messagesEndRef = useRef(null);
   const messageRefsMap = useRef({});
 
@@ -732,19 +734,20 @@ export default function InboxPage() {
                 )}
               </div>
 
-              {isStarted && (
-                <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', padding: '16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Inline Reply Form - Shows when reply button is clicked */}
-                  {replyingToId && (
-                    <div style={{ 
-                      borderRadius: '12px', 
-                      border: '1px solid rgba(99, 102, 241, 0.3)', 
-                      padding: '16px', 
-                      background: 'rgba(99, 102, 241, 0.04)', 
-                      height: inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' && isTemplateTimeExpired(selectedInbox?.whatsappConversationEndDateTime) ? '150px' : '230px',
-                      overflow: 'auto' 
-                    }}>
-                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
+              <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', padding: '16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {isStarted && (
+                  <>
+                    {/* Inline Reply Form - Shows when reply button is clicked */}
+                    {replyingToId && (
+                      <div style={{ 
+                        borderRadius: '12px', 
+                        border: '1px solid rgba(99, 102, 241, 0.3)', 
+                        padding: '16px', 
+                        background: 'rgba(99, 102, 241, 0.04)', 
+                        height: inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' && isTemplateTimeExpired(selectedInbox?.whatsappConversationEndDateTime) ? '150px' : '250px',
+                        overflow: 'auto' 
+                      }}>
+                        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
                       
                       {/* Get the message being replied to */}
                       {inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' ? (
@@ -819,18 +822,179 @@ export default function InboxPage() {
                       </div>
                     </div>
                   )}
+                  </>
+                )}
 
-                  {/* Compose Buttons Section */}
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <button style={buttonStyle('#3b82f6', '#fff')} onClick={() => setModal({ type: 'email', data: { email_address: selectedInbox.owner?.email || '', subject: '', body: '' } })}>
-                      📧 Compose Email
+                {/* Compose Buttons Section - Bottom Right - Always Visible */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+                    <button 
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        border: 'none',
+                        color: '#000',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onClick={() => {
+                        setComposingType('email');
+                        setComposeForm({ email: selectedInbox.owner?.email || selectedInbox.dummyOwner?.email || '', subject: '', body: '', mobile: '', template: '' });
+                      }}
+                    >
+                      <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Email.png" alt="Email" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
+                      <span>New</span>
                     </button>
-                    <button style={buttonStyle('#25d366', '#fff')} onClick={() => setModal({ type: 'whatsapp', data: { mobile_number: selectedInbox.owner?.mobile || '', template_name: '' } })}>
-                      <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" alt="WhatsApp" style={{ width: '18px', height: '18px', objectFit: 'contain' }} /> Compose WhatsApp
+                    <button 
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        border: 'none',
+                        color: '#000',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onClick={() => {
+                        setComposingType('whatsapp');
+                        setComposeForm({ email: '', subject: '', body: '', mobile: selectedInbox.owner?.mobile || selectedInbox.owner?.mobileno || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || '', template: '' });
+                      }}
+                    >
+                      <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" alt="WhatsApp" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
+                      <span>New</span>
                     </button>
                   </div>
+
+                  {/* Inline Compose Section - Email */}
+                  {composingType === 'email' && (
+                    <div style={{ 
+                      borderRadius: '12px', 
+                      border: '1px solid rgba(59, 130, 246, 0.3)', 
+                      padding: '16px', 
+                      background: 'rgba(59, 130, 246, 0.04)' 
+                    }}>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: '#3b82f6' }}>Email</div>
+                      
+                      <div style={{ }}>
+                        <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
+                        <input
+                          type="email"
+                          style={inputStyle}
+                          placeholder="Email Address"
+                          value={composeForm.email}
+                          onChange={(e) => setComposeForm({ ...composeForm, email: e.target.value })}
+                        />
+                      </div>
+                      
+                      <div style={{  }}>
+                        <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>Subject</label>
+                        <input
+                          type="text"
+                          style={inputStyle}
+                          placeholder="Subject"
+                          value={composeForm.subject}
+                          onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
+                        />
+                      </div>
+                      
+                      <div style={{ marginBottom: '12px' }}>
+        
+                        <EmailEditor
+                          value={composeForm.body || ''}
+                          onChange={(value) => setComposeForm({ ...composeForm, body: value })}
+                          placeholder=""
+                        />
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                        <button
+                          style={buttonStyle('transparent', '#050c18')}
+                          onClick={() => {
+                            setComposingType(null);
+                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          style={buttonStyle('#3b82f6', '#fff')}
+                          onClick={() => {
+                            handleSendEmail({ email: composeForm.email, subject: composeForm.subject, htmlBody: composeForm.body });
+                            setComposingType(null);
+                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
+                          }}
+                          disabled={sending}
+                        >
+                          {sending ? <span className="spinner spinner-white" /> : 'Send'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Inline Compose Section - WhatsApp */}
+                  {composingType === 'whatsapp' && (
+                    <div style={{ 
+                      borderRadius: '12px', 
+                      border: '1px solid rgba(37, 211, 102, 0.3)', 
+                      padding: '16px', 
+                      background: 'rgba(37, 211, 102, 0.04)' 
+                    }}>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: '#25d366' }}>WhatsApp</div>
+                      
+                      <div style={{ marginBottom: '12px' }}>
+                        
+                        <input
+                          type="tel"
+                          style={inputStyle}
+                          placeholder="Mobile Number"
+                          value={composeForm.mobile}
+                          onChange={(e) => setComposeForm({ ...composeForm, mobile: e.target.value })}
+                        />
+                      </div>
+                      
+                      <div style={{ marginBottom: '12px' }}>
+                        <input
+                          type="text"
+                          style={inputStyle}
+                          placeholder="Template Name"
+                          value={composeForm.template}
+                          onChange={(e) => setComposeForm({ ...composeForm, template: e.target.value })}
+                        />
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                        <button
+                          style={buttonStyle('transparent', '#050c18')}
+                          onClick={() => {
+                            setComposingType(null);
+                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          style={buttonStyle('#25d366', '#fff')}
+                          onClick={() => {
+                            handleSendWhatsApp({ mobile: composeForm.mobile, template: composeForm.template, body: composeForm.body });
+                            setComposingType(null);
+                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
+                          }}
+                          disabled={sending}
+                        >
+                          {sending ? <span className="spinner spinner-white" /> : 'Send'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
             </>
           ) : (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#000000' }}>
