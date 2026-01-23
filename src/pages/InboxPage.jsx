@@ -212,8 +212,45 @@ export default function InboxPage() {
     })
     .filter((i) => {
       if (!search) return true;
-      const fullname = (i.owner?.fullname || i.owner?.name || '').toLowerCase();
-      return fullname.includes(search.toLowerCase());
+      const searchLower = search.toLowerCase();
+      
+      // Owner fields to search
+      const ownerFields = [
+        i.owner?.email,
+        i.owner?.fullname,
+        i.owner?.name,
+        i.owner?.mobileno,
+        i.owner?.registeredfrom,
+        i.owner?.country,
+        i.owner?.usercountry,
+      ];
+      
+      // Check interests array if it exists
+      if (i.owner?.interest && Array.isArray(i.owner.interest)) {
+        i.owner.interest.forEach(int => {
+          ownerFields.push(int.interests || int);
+        });
+      }
+      
+      // DummyOwner fields to search
+      const dummyOwnerFields = [
+        i.dummyOwner?.name,
+        i.dummyOwner?.email,
+        i.dummyOwner?.mobileno,
+      ];
+      
+      // Inbox preview field
+      const inboxFields = [
+        i.preview,
+      ];
+      
+      // Combine all searchable fields
+      const allFields = [...ownerFields, ...dummyOwnerFields, ...inboxFields];
+      
+      // Check if any field contains the search term
+      return allFields.some(field => 
+        field && String(field).toLowerCase().includes(searchLower)
+      );
     })
     .sort((a, b) => {
       // First, sort by isUnread: unread inboxes come first
@@ -505,6 +542,7 @@ export default function InboxPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search"
               style={{ ...inputStyle, marginBottom: '12px' }}
             />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
