@@ -5,6 +5,7 @@ import { ContextPanel } from '../components/layout/ContextPanel';
 import { EmailEditor } from '../components/EmailEditor';
 import { OutlookEditor } from '../components/OutlookEditor';
 import { WhatsAppEditor } from '../components/WhatsAppEditor';
+import { WhatsAppTemplateSelector } from '../components/WhatsAppTemplateSelector';
 import { MessageBubble } from '../components/MessageBubble';
 
 const formatDate = (date) => {
@@ -52,7 +53,7 @@ export default function InboxPage() {
     inboxes, messages, selectedInbox, setSelectedInbox, setInboxes, updateInboxStatus,
     activeFilter, setActiveFilter, loading, fetchInboxes, fetchMessages,
     sendWhatsappTemplate, sendWhatsappMessage, sendEmailReply, sendNewEmail, createNote,
-    queryTypes, fetchQueryTypes,
+    queryTypes, fetchQueryTypes, sendWhatsappTemplateWithParams,
   } = useGlobalStore();
 
   const [showContextPanel, setShowContextPanel] = useState(false);
@@ -70,6 +71,52 @@ export default function InboxPage() {
 
   useEffect(() => { loadInboxes(); }, [activeFilter]);
   useEffect(() => { fetchQueryTypes(); }, [fetchQueryTypes]);
+
+  // Socket.io event listeners for real-time updates
+  useEffect(() => {
+    const setupSocketListeners = async () => {
+      try {
+        const { socketService } = await import('../services/socketService');
+        
+        if (!socketService.isSocketConnected()) {
+          console.log('Socket not connected, retrying in 1s...');
+          setTimeout(setupSocketListeners, 1000);
+          return;
+        }
+
+        // Listen for new messages
+        socketService.socket.on('message', (messageData) => {
+          console.log('New message received via socket:', messageData);
+          if (messageData && messageData._id) {
+            // Extract inbox ID from message
+            const mInboxId = typeof messageData.inbox === 'object' 
+              ? messageData.inbox._id 
+              : messageData.inbox;
+            
+            // If this message belongs to the currently selected inbox, add it to messages list
+            if (selectedInbox && selectedInbox._id === mInboxId) {
+              setMessages(prevMessages => {
+                if (!Array.isArray(prevMessages)) return [messageData];
+                // Check if message already exists to avoid duplicates
+                if (prevMessages.some(m => m._id === messageData._id)) {
+                  return prevMessages;
+                }
+                return [...prevMessages, messageData];
+              });
+            }
+          }
+        });
+
+        return () => {
+          socketService.socket.off('message');
+        };
+      } catch (error) {
+        console.error('Error setting up socket listeners:', error);
+      }
+    };
+
+    setupSocketListeners();
+  }, [selectedInbox, setInboxes, fetchMessages]);
   
   // Enable audio playback on user interaction
   useEffect(() => {
@@ -203,7 +250,14 @@ export default function InboxPage() {
 
   const allowedStatuses = Object.keys(statusOrder);
 
-  const filteredInboxes = inboxes
+  // Ensure inboxes is an array - could be object with data property
+  const inboxesArray = Array.isArray(inboxes) 
+    ? inboxes 
+    : (inboxes?.data && Array.isArray(inboxes.data)) 
+      ? inboxes.data 
+      : [];
+
+  const filteredInboxes = inboxesArray
     .filter((i) => {
       // When 'all' is selected, only show the allowed statuses in the defined order
       if (activeFilter === 'all') return allowedStatuses.includes(i.status);
@@ -241,7 +295,7 @@ export default function InboxPage() {
       
       // Inbox preview field
       const inboxFields = [
-        i.preview,
+        i.preview?.value,
       ];
       
       // Combine all searchable fields
@@ -271,7 +325,12 @@ export default function InboxPage() {
     });
 
   const inboxMessages = messages
-    .filter((m) => m.inbox?._id === selectedInbox?._id)
+    .filter((m) => {
+      // Handle both inbox as object with _id and inbox as string ID
+      const mInboxId = typeof m.inbox === 'object' ? m.inbox?._id : m.inbox;
+      const selectedId = selectedInbox?._id;
+      return mInboxId === selectedId;
+    })
     .sort((a, b) => {
       const timeA = new Date(a.messageDateTime || a.createdAt).getTime();
       const timeB = new Date(b.messageDateTime || b.createdAt).getTime();
@@ -334,45 +393,53 @@ export default function InboxPage() {
 
   const handleSendEmail = async (data = null) => {
     const sendData = data || modal.data;
-    if (!selectedInbox || !sendData.subject || !sendData.htmlBody) return;
-    const email = sendData.email || selectedInbox.owner?.email || selectedInbox.owner?.dummyOwner?.name || selectedInbox.dummyOwner?.name;
-    if (!email) {
-      showToast('Email address not found', 'error');
-      console.error('Email lookup failed:', { sendData, owner: selectedInbox.owner, dummyOwner: selectedInbox.dummyOwner });
+    if (!sendData.email || !sendData.htmlBody) {
+      showToast('Please fill in email and body', 'error');
       return;
     }
     setSending(true);
     try {
-      await sendNewEmail(email, sendData.subject, sendData.htmlBody);
+      await sendNewEmail(sendData.email, sendData.subject || '', sendData.htmlBody);
       showToast('Email sent', 'success');
       closeModal();
-      await fetchMessages(selectedInbox._id);
-    } catch { showToast('Failed to send email', 'error'); }
+      // Let socket.io 'message' event handle state updates
+    } catch (error) {
+      console.error('Email send error:', error);
+      showToast('Failed to send email', 'error');
+    }
     finally { setSending(false); }
   };
 
   const handleSendWhatsApp = async (data = null) => {
     const sendData = data || modal.data;
-    if (!selectedInbox || !sendData.body && !sendData.template) return;
-    const mobile = sendData.mobile || selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobile;
-    if (!mobile) {
-      showToast('Mobile number not found', 'error');
-      console.error('Mobile lookup failed:', { sendData, owner: selectedInbox.owner, dummyOwner: selectedInbox.dummyOwner });
+    if (!sendData.mobile) {
+      showToast('Please enter mobile number', 'error');
       return;
     }
+    
+    // Check if it's a template send or direct message send
+    if (!sendData.template && !sendData.body) {
+      showToast('Please select template or enter message', 'error');
+      return;
+    }
+    
+    // Close modal IMMEDIATELY - don't wait for API response
+    closeModal();
+    
     setSending(true);
     try {
-      if (sendData.template) {
-        await sendWhatsappTemplate(mobile, sendData.template);
+      // If it's a template send (has template object with components)
+      if (sendData.template && sendData.template.components) {
+        await sendWhatsappTemplateWithParams(sendData.mobile, sendData.template);
       } else if (sendData.body) {
-        await sendWhatsappMessage(mobile, sendData.body);
+        // Direct message send
+        await sendWhatsappMessage(sendData.mobile, sendData.body);
       }
-      showToast('WhatsApp message sent', 'success');
-      closeModal();
-      await fetchMessages(selectedInbox._id);
+      showToast('WhatsApp sent', 'success');
+      // Let socket.io 'message' event handle state updates
     } catch (error) {
       console.error('WhatsApp send error:', error);
-      showToast('Failed to send WhatsApp', 'error');
+      showToast('Failed to send message', 'error');
     }
     finally { setSending(false); }
   };
@@ -538,13 +605,38 @@ export default function InboxPage() {
         {/* Inbox List */}
         <div style={listPanelStyle}>
           <div style={listHeaderStyle}>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search"
-              style={{ ...inputStyle, marginBottom: '12px' }}
-            />
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search"
+                style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+              />
+              <button
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: '#6366f1',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  transition: 'all 0.2s',
+                }}
+                onClick={() => setModal({ type: 'compose-options', data: {} })}
+                onMouseEnter={(e) => e.target.style.background = '#4f46e5'}
+                onMouseLeave={(e) => e.target.style.background = '#6366f1'}
+                title="Compose new message"
+              >
+                +
+              </button>
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {statusFilters.map((f) => (
                 <button key={f.value} style={filterBtnStyle(activeFilter === f.value)} onClick={() => setActiveFilter(f.value)}>
@@ -661,9 +753,9 @@ export default function InboxPage() {
                           whiteSpace: 'nowrap',
                           cursor: 'default'
                         }}
-                        title={isHtmlFormat(inbox.preview) ? getPlainTextFromHtml(inbox.preview) : (inbox.preview || 'No preview available')}
+                        title={isHtmlFormat(inbox.preview?.value) ? getPlainTextFromHtml(inbox.preview?.value) : (inbox.preview?.value || 'No preview available')}
                       >
-                        {isHtmlFormat(inbox.preview) ? (
+                        {isHtmlFormat(inbox.preview?.value) ? (
                           <div
                             style={{
                               overflow: 'hidden',
@@ -672,11 +764,11 @@ export default function InboxPage() {
                               display: 'inline'
                             }}
                             dangerouslySetInnerHTML={{
-                              __html: inbox.preview
+                              __html: inbox.preview?.value
                             }}
                           />
                         ) : (
-                          inbox.preview || 'No preview available'
+                          inbox.preview?.value || 'No preview available'
                         )}
                       </div>
 
@@ -782,7 +874,6 @@ export default function InboxPage() {
                         border: '1px solid rgba(99, 102, 241, 0.3)', 
                         padding: '16px', 
                         background: 'rgba(99, 102, 241, 0.04)', 
-                        height: inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' && isTemplateTimeExpired(selectedInbox?.whatsappConversationEndDateTime) ? '150px' : '250px',
                         overflow: 'auto' 
                       }}>
                         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
@@ -790,28 +881,30 @@ export default function InboxPage() {
                       {/* Get the message being replied to */}
                       {inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' ? (
                         <>
-                          {isTemplateTimeExpired(selectedInbox?.whatsappConversationEndDateTime) ? (
-                            // Current time > Template time - show Template Name input
-                            <div style={{  }}>
-                              <input
-                                type="text"
-                                style={inputStyle}
-                                placeholder="Template Name"
-                                value={replyForm.template || ''}
-                                onChange={(e) => setReplyForm({ ...replyForm, template: e.target.value })}
-                              />
-                            </div>
-                          ) : (
-                            // Current time <= Template time - show Reply input
-                            <div style={{  }}>
-                              
-                              <textarea
-                                style={textareaStyle}
-                               value={replyForm.body || ''}
-                                onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
-                              />
-                            </div>
-                          )}
+                          {/* For WhatsApp always show template selector button */}
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                              style={buttonStyle('transparent', '#050c18')}
+                              onClick={() => {
+                                setReplyingToId(null);
+                                setReplyForm({ body: '', template: '' });
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              style={buttonStyle('#6366f1', '#fff')}
+                              onClick={() => {
+                                setReplyingToId(null);
+                                setReplyForm({ body: '', template: '' });
+                                const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile;
+                                setModal({ type: 'whatsapp-reply-template', data: { mobile, messageId: replyingToId } });
+                              }}
+                              disabled={sending}
+                            >
+                              {sending ? <span className="spinner spinner-white" /> : 'Select Template'}
+                            </button>
+                          </div>
                         </>
                       ) : inboxMessages.find(m => m._id === replyingToId)?.source === 'web' ? (
                         <>
@@ -824,6 +917,27 @@ export default function InboxPage() {
                               onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
                             />
                           </div>
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                              style={buttonStyle('transparent', '#050c18')}
+                              onClick={() => {
+                                setReplyingToId(null);
+                                setReplyForm({ body: '', template: '' });
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              style={buttonStyle('#6366f1', '#fff')}
+                              onClick={() => {
+                                const msg = inboxMessages.find(m => m._id === replyingToId);
+                                handleInlineReply(msg, msg?.source !== 'whatsapp');
+                              }}
+                              disabled={sending}
+                            >
+                              {sending ? <span className="spinner spinner-white" /> : 'Reply'}
+                            </button>
+                          </div>
                         </>
                       ) : (
                         <>
@@ -834,30 +948,29 @@ export default function InboxPage() {
                
                             />
                           </div>
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                              style={buttonStyle('transparent', '#050c18')}
+                              onClick={() => {
+                                setReplyingToId(null);
+                                setReplyForm({ body: '', template: '' });
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              style={buttonStyle('#6366f1', '#fff')}
+                              onClick={() => {
+                                const msg = inboxMessages.find(m => m._id === replyingToId);
+                                handleInlineReply(msg, msg?.source !== 'whatsapp');
+                              }}
+                              disabled={sending}
+                            >
+                              {sending ? <span className="spinner spinner-white" /> : 'Reply'}
+                            </button>
+                          </div>
                         </>
                       )}
-
-                      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                        <button
-                          style={buttonStyle('transparent', '#050c18')}
-                          onClick={() => {
-                            setReplyingToId(null);
-                            setReplyForm({ body: '', template: '' });
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          style={buttonStyle('#6366f1', '#fff')}
-                          onClick={() => {
-                            const msg = inboxMessages.find(m => m._id === replyingToId);
-                            handleInlineReply(msg, msg?.source !== 'whatsapp');
-                          }}
-                          disabled={sending}
-                        >
-                          {sending ? <span className="spinner spinner-white" /> : 'Reply'}
-                        </button>
-                      </div>
                     </div>
                   )}
                   </>
@@ -902,8 +1015,9 @@ export default function InboxPage() {
                         transition: 'all 0.2s',
                       }}
                       onClick={() => {
-                        setComposingType('whatsapp');
-                        setComposeForm({ email: '', subject: '', body: '', mobile: selectedInbox.owner?.mobile || selectedInbox.owner?.mobileno || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || '', template: '' });
+                        const mobile = selectedInbox.owner?.mobile || selectedInbox.owner?.mobileno || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || '';
+                        // Always open template modal directly for WhatsApp
+                        setModal({ type: 'whatsapp-compose-template', data: { mobile } });
                       }}
                     >
                       <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" alt="WhatsApp" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
@@ -925,10 +1039,11 @@ export default function InboxPage() {
                         <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
                         <input
                           type="email"
-                          style={inputStyle}
+                          style={{...inputStyle, backgroundColor: (selectedInbox?.owner || selectedInbox?.dummyOwner) ? '#f5f5f5' : '#fff'}}
                           placeholder="Email Address"
                           value={composeForm.email}
                           onChange={(e) => setComposeForm({ ...composeForm, email: e.target.value })}
+                          readOnly={(selectedInbox?.owner || selectedInbox?.dummyOwner) ? true : false}
                         />
                       </div>
                       
@@ -976,62 +1091,6 @@ export default function InboxPage() {
                       </div>
                     </div>
                   )}
-
-                  {/* Inline Compose Section - WhatsApp */}
-                  {composingType === 'whatsapp' && (
-                    <div style={{ 
-                      borderRadius: '12px', 
-                      border: '1px solid rgba(37, 211, 102, 0.3)', 
-                      padding: '16px', 
-                      background: 'rgba(37, 211, 102, 0.04)' 
-                    }}>
-                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: '#25d366' }}>WhatsApp</div>
-                      
-                      <div style={{ marginBottom: '12px' }}>
-                        
-                        <input
-                          type="tel"
-                          style={inputStyle}
-                          placeholder="Mobile Number"
-                          value={composeForm.mobile}
-                          onChange={(e) => setComposeForm({ ...composeForm, mobile: e.target.value })}
-                        />
-                      </div>
-                      
-                      <div style={{ marginBottom: '12px' }}>
-                        <input
-                          type="text"
-                          style={inputStyle}
-                          placeholder="Template Name"
-                          value={composeForm.template}
-                          onChange={(e) => setComposeForm({ ...composeForm, template: e.target.value })}
-                        />
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                        <button
-                          style={buttonStyle('transparent', '#050c18')}
-                          onClick={() => {
-                            setComposingType(null);
-                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          style={buttonStyle('#25d366', '#fff')}
-                          onClick={() => {
-                            handleSendWhatsApp({ mobile: composeForm.mobile, template: composeForm.template, body: composeForm.body });
-                            setComposingType(null);
-                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
-                          }}
-                          disabled={sending}
-                        >
-                          {sending ? <span className="spinner spinner-white" /> : 'Send'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
             </>
           ) : (
@@ -1047,6 +1106,137 @@ export default function InboxPage() {
       </div>
 
       {/* Modals */}
+      {modal.type === 'compose-options' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={{ ...modalStyle, maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>Compose Message</div>
+            <div style={modalBodyStyle}>
+              <p style={{ marginBottom: '16px', color: '#64748b', fontSize: '14px' }}>
+                Select how you would like to contact:
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <button
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '16px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    background: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    transition: 'all 0.2s',
+                  }}
+                  onClick={() => {
+                    setModal({ type: 'email-compose', data: {} });
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f0f4f8';
+                    e.currentTarget.style.borderColor = '#6366f1';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#fff';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }}
+                >
+                  <img 
+                    src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Email.png" 
+                    alt="email" 
+                    style={{ width: '24px', height: '24px' }} 
+                  />
+                  <span>Send Email</span>
+                </button>
+                <button
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '16px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    background: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    transition: 'all 0.2s',
+                  }}
+                  onClick={() => {
+                    setModal({ type: 'whatsapp-compose', data: {} });
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f0f4f8';
+                    e.currentTarget.style.borderColor = '#25d366';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#fff';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }}
+                >
+                  <img 
+                    src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" 
+                    alt="whatsapp" 
+                    style={{ width: '24px', height: '24px' }} 
+                  />
+                  <span>Send WhatsApp</span>
+                </button>
+              </div>
+            </div>
+            <div style={modalFooterStyle}>
+              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal.type === 'email-compose' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={{ ...modalStyle, maxWidth: '800px', width: '90%', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
+            <OutlookEditor
+              isReply={false}
+              recipientEmail={''}
+              onSend={(data) => {
+                handleSendEmail(data);
+              }}
+              onCancel={closeModal}
+            />
+          </div>
+        </div>
+      )}
+
+      {modal.type === 'whatsapp-compose' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={{ ...modalStyle, maxWidth: '1200px', width: '95%', maxHeight: '90vh', padding: 0, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            <WhatsAppEditor
+              isReply={false}
+              recipientMobile={''}
+              onSend={(data) => {
+                handleSendWhatsApp(data);
+              }}
+              onCancel={closeModal}
+            />
+          </div>
+        </div>
+      )}
+
+      {modal.type === 'whatsapp-compose-template' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={{ ...modalStyle, maxWidth: '1200px', width: '95%', maxHeight: '90vh', padding: 0, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            <WhatsAppTemplateSelector
+              recipientMobile={modal.data.mobile || ''}
+              onSend={(data) => {
+                handleSendWhatsApp(data);
+                closeModal();
+              }}
+              onCancel={closeModal}
+            />
+          </div>
+        </div>
+      )}
+
       {modal.type === 'note' && (
         <div style={modalOverlayStyle} onClick={closeModal}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
@@ -1153,6 +1343,21 @@ export default function InboxPage() {
               recipientMobile={selectedInbox?.owner?.mobileno || selectedInbox?.owner?.mobile || selectedInbox?.owner?.dummyOwner?.mobile || selectedInbox?.dummyOwner?.mobile || ''}
               onSend={(data) => {
                 handleSendWhatsApp(data);
+              }}
+              onCancel={closeModal}
+            />
+          </div>
+        </div>
+      )}
+
+      {modal.type === 'whatsapp-reply-template' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={{ ...modalStyle, maxWidth: '1200px', width: '95%', maxHeight: '90vh', padding: 0, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            <WhatsAppTemplateSelector
+              recipientMobile={modal.data.mobile || ''}
+              onSend={(data) => {
+                handleSendWhatsApp(data);
+                closeModal();
               }}
               onCancel={closeModal}
             />

@@ -1,4 +1,4 @@
-const BASE_URL = 'https://internal-product-backend.onrender.com';
+const BASE_URL = 'https://customer-support-v5v9.onrender.com';
 
 class ApiService {
   async request(endpoint, options = {}) {
@@ -132,6 +132,19 @@ class ApiService {
     return this.request('/queryType', {
       method: 'POST',
       body: { name },
+    });
+  }
+
+  // WhatsApp Templates - GET /whatsapp/templates
+  async fetchWhatsappTemplates() {
+    return this.request('/whatsapp/templates');
+  }
+
+  // Send WhatsApp Template - POST /whatsapp/template
+  async sendWhatsappTemplateWithParams(mobile, template) {
+    return this.request('/whatsapp/template', {
+      method: 'POST',
+      body: { mobile, template },
     });
   }
 }

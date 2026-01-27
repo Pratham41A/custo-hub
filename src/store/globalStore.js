@@ -74,7 +74,15 @@ export const useGlobalStore = create((set, get) => ({
         endDate: options.endDate ?? dateRange.end ?? '',
       };
       const data = await apiService.getInboxes(params);
-      const inboxList = data.inboxes || data.data || data || [];
+      // Extract array from various response formats
+      let inboxList = [];
+      if (Array.isArray(data)) {
+        inboxList = data;
+      } else if (data?.inboxes && Array.isArray(data.inboxes)) {
+        inboxList = data.inboxes;
+      } else if (data?.data && Array.isArray(data.data)) {
+        inboxList = data.data;
+      }
       setInboxes(inboxList);
       return inboxList;
     } catch (error) {
@@ -271,6 +279,28 @@ export const useGlobalStore = create((set, get) => ({
       throw error;
     }
   },
+
+  // Fetch WhatsApp Templates
+  fetchWhatsappTemplates: async () => {
+    try {
+      const response = await apiService.fetchWhatsappTemplates();
+      const templates = response.whatsappTemplates || response.templates || response || [];
+      return templates;
+    } catch (error) {
+      console.error('Failed to fetch whatsapp templates:', error);
+      return [];
+    }
+  },
+
+  // Send WhatsApp Template with parameters
+  sendWhatsappTemplateWithParams: async (mobile, template) => {
+    try {
+      return await apiService.sendWhatsappTemplateWithParams(mobile, template);
+    } catch (error) {
+      console.error('Failed to send whatsapp template:', error);
+      throw error;
+    }
+  },
   
   // Dashboard Stats - matches API response format
   getDashboardStats: () => {
@@ -278,14 +308,14 @@ export const useGlobalStore = create((set, get) => ({
     
     if (dashboardData) {
       const statusKeys = ['unread', 'read', 'started', 'resolved'];
-      const channelKeys = ['whatsapp', 'email', 'webchat'];
+      const channelKeys = ['whatsapp', 'email', 'web'];
       
       // Extract channels
       const channels = channelKeys
         .filter(key => dashboardData[key] !== undefined)
         .map(key => ({ _id: key, count: dashboardData[key] || 0 }));
       
-      // Extract query types (everything else)
+      // Extract query types (everything else that is not status or channel)
       const queryTypes = Object.keys(dashboardData)
         .filter(key => !statusKeys.includes(key) && !channelKeys.includes(key))
         .map(key => ({ _id: key, count: dashboardData[key] || 0 }));
