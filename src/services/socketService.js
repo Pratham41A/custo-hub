@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import { useGlobalStore } from '../store/globalStore';
 
-const SOCKET_URL = 'https://customer-support-v5v9.onrender.com';
+const SOCKET_URL = 'https://sadmin-api.onference.in';
 
 class SocketService {
   socket = null;
