@@ -44,7 +44,10 @@ export default function Dashboard() {
 
 
 
+  const allCount = (stats.unread || 0) + (stats.read || 0) + (stats.started || 0) + (stats.resolved || 0);
+
   const statCards = [
+    { label: 'All', value: allCount, color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
     { label: 'Unread', value: stats.unread, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
     { label: 'Read', value: stats.read, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
     { label: 'Started', value: stats.started, color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
