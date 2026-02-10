@@ -75,6 +75,37 @@ export default function InboxPage() {
   }, [activeFilter]);
   useEffect(() => { fetchQueryTypes(); }, [fetchQueryTypes]);
 
+  // Helper: resolve mobile number from multiple possible locations
+  const resolveMobile = (inbox, message) => {
+    // Check inbox.owner first
+    const owner = inbox?.owner;
+    const dummyInbox = inbox?.dummyOwner;
+
+    const candidates = [
+      owner?.mobileno,
+      owner?.mobile,
+      owner?.dummyOwner?.mobileno,
+      owner?.dummyOwner?.mobile,
+      dummyInbox?.mobileno,
+      dummyInbox?.mobile,
+      // Message-level fallbacks
+      message?.owner?.mobileno,
+      message?.owner?.mobile,
+      message?.owner?.dummyOwner?.mobileno,
+      message?.owner?.dummyOwner?.mobile,
+      message?.dummyOwner?.mobileno,
+      message?.dummyOwner?.mobile,
+      // Some payloads might include mobile directly
+      message?.mobile,
+      message?.mobileno,
+    ];
+
+    for (const c of candidates) {
+      if (c) return c;
+    }
+    return undefined;
+  };
+
   // Reset reply UI when selected inbox changes so reply section re-renders
   useEffect(() => {
     setReplyingToId(null);
@@ -450,13 +481,13 @@ export default function InboxPage() {
       const isWhatsApp = msg?.source === 'whatsapp';
       console.log('Reply Debug:', { isWhatsApp, msg, owner: selectedInbox.owner, ownerKeys: Object.keys(selectedInbox.owner || {}) });
       if (isWhatsApp && modal.data.template) {
-        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobile;
+        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobileno || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobileno || selectedInbox.dummyOwner?.mobile;
         console.log('Owner object properties:', selectedInbox.owner);
         console.log('Sending WhatsApp template reply:', { mobile, template: modal.data.template });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappTemplate(mobile, modal.data.template);
       } else if (isWhatsApp && modal.data.body) {
-        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobile;
+        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobileno || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobileno || selectedInbox.dummyOwner?.mobile;
         console.log('Sending WhatsApp message reply:', { mobile, body: modal.data.body });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappMessage(mobile, modal.data.body);
@@ -477,14 +508,28 @@ export default function InboxPage() {
   };
 
   const handleInlineReply = async (message, isSendingEmail = false) => {
-    if (!selectedInbox || (!replyForm.body && !replyForm.template)) return;
+    console.log('🔍 handleInlineReply called with:', { message, isSendingEmail, replyForm, selectedInbox: selectedInbox?._id });
+    if (!selectedInbox || (!replyForm.body && !replyForm.template)) {
+      console.warn('⚠️ Validation failed:', { selectedInbox: !!selectedInbox, body: replyForm.body, template: replyForm.template });
+      return;
+    }
     setSending(true);
     try {
+      console.log('📝 Message object details:', { 
+        messageId: message?._id, 
+        source: message?.source, 
+        isSent: message?.isSent,
+        contentKeys: Object.keys(message || {}).slice(0, 10)
+      });
+      
       const isWhatsApp = message?.source === 'whatsapp';
       const isWeb = message?.source === 'web';
       
+      console.log('📊 Source detection:', { isWhatsApp, isWeb, isSendingEmail });
+      
       if (isWeb) {
         // Send Web Reply - emit socket event
+        console.log('🌐 Sending web reply via socket');
         const socketService = (await import('../services/socketService')).socketService;
         if (socketService.isSocketConnected()) {
           socketService.socket.emit('agent_message', {
@@ -496,25 +541,36 @@ export default function InboxPage() {
         }
       } else if (isSendingEmail || !isWhatsApp) {
         // Send Email Reply
+        console.log('📧 Sending email reply');
         const email = selectedInbox.owner?.email || selectedInbox.dummyOwner?.email || selectedInbox.dummyOwner?.name || selectedInbox.owner?.dummyOwner?.email;
+        console.log('📧 Email address:', email);
         if (!email) throw new Error('Email not found');
         await sendEmailReply(message?.messageId, replyForm.body, email);
       } else {
         // Send WhatsApp Reply
-        const mobile = selectedInbox.owner?.mobile || selectedInbox.owner?.mobileno;
+        console.log('💬 Sending WhatsApp reply');
+        const mobile = resolveMobile(selectedInbox, message);
+        console.log('📱 Mobile number (resolved):', mobile);
         if (!mobile) throw new Error('Mobile number not found');
         
         // Check if current time is past template time
-        if (isTemplateTimeExpired(selectedInbox.whatsappConversationEndDateTime)) {
+        const timeExpired = isTemplateTimeExpired(selectedInbox.whatsappConversationEndDateTime);
+        console.log('⏰ Template time check:', { endDateTime: selectedInbox.whatsappConversationEndDateTime, timeExpired });
+        
+        if (timeExpired) {
           // Current time > Template time - send template
+          console.log('📋 Sending template (window expired)');
           if (replyForm.template) {
+            console.log('📤 API call: sendWhatsappTemplate', { mobile, template: replyForm.template });
             await sendWhatsappTemplate(mobile, replyForm.template);
           } else {
             throw new Error('Template name required');
           }
         } else {
           // Current time <= Template time - send direct message
+          console.log('💬 Sending direct message (window active)');
           if (replyForm.body) {
+            console.log('📤 API call: sendWhatsappMessage', { mobile, body: replyForm.body });
             await sendWhatsappMessage(mobile, replyForm.body);
           } else {
             throw new Error('Message body required');
@@ -527,7 +583,7 @@ export default function InboxPage() {
       setReplyForm({ body: '', template: '' });
       await fetchMessages(selectedInbox._id);
     } catch (error) {
-      console.error('Inline reply error:', error);
+      console.error('❌ Inline reply error:', error.message, error);
       showToast('Failed to send reply', 'error');
     } finally {
       setSending(false);
@@ -903,30 +959,66 @@ export default function InboxPage() {
                     {/* Get the message being replied to */}
                     {inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' ? (
                       <>
-                        {/* For WhatsApp always show template selector button */}
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                          <button
-                            style={buttonStyle('transparent', '#050c18')}
-                            onClick={() => {
-                              setReplyingToId(null);
-                              setReplyForm({ body: '', template: '' });
-                            }}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            style={buttonStyle('#6366f1', '#fff')}
-                            onClick={() => {
-                              setReplyingToId(null);
-                              setReplyForm({ body: '', template: '' });
-                              const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile;
-                              setModal({ type: 'whatsapp-reply-template', data: { mobile, messageId: replyingToId } });
-                            }}
-                            disabled={sending}
-                          >
-                            {sending ? <span className="spinner spinner-white" /> : 'Select Template'}
-                          </button>
-                        </div>
+                        {/* Check if conversation window is still active (within 24h) */}
+                        {isTemplateTimeExpired(selectedInbox.whatsappConversationEndDateTime) ? (
+                          // Outside 24h window - Template required
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                              style={buttonStyle('transparent', '#050c18')}
+                              onClick={() => {
+                                setReplyingToId(null);
+                                setReplyForm({ body: '', template: '' });
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              style={buttonStyle('#6366f1', '#fff')}
+                              onClick={() => {
+                                setReplyingToId(null);
+                                setReplyForm({ body: '', template: '' });
+                                const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobileno || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobileno || selectedInbox.dummyOwner?.mobile;
+                                setModal({ type: 'whatsapp-reply-template', data: { mobile, messageId: replyingToId } });
+                              }}
+                              disabled={sending}
+                            >
+                              {sending ? <span className="spinner spinner-white" /> : '📋 Select Template'}
+                            </button>
+                          </div>
+                        ) : (
+                          // Within 24h window - Direct message allowed
+                          <>
+                            <div style={{ marginBottom: '12px' }}>
+                              <textarea
+                                style={textareaStyle}
+                                placeholder="Type your reply..."
+                                value={replyForm.body || ''}
+                                onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                              <button
+                                style={buttonStyle('transparent', '#050c18')}
+                                onClick={() => {
+                                  setReplyingToId(null);
+                                  setReplyForm({ body: '', template: '' });
+                                }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                style={buttonStyle('#6366f1', '#fff')}
+                                onClick={() => {
+                                  const msg = inboxMessages.find(m => m._id === replyingToId);
+                                  handleInlineReply(msg);
+                                }}
+                                disabled={sending || !replyForm.body}
+                              >
+                                {sending ? <span className="spinner spinner-white" /> : '📤 Reply'}
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </>
                     ) : inboxMessages.find(m => m._id === replyingToId)?.source === 'web' ? (
                       <>
