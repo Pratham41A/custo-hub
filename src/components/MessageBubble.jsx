@@ -18,6 +18,76 @@ const sanitizeAndFixHTML = (htmlString) => {
   if (!htmlString || typeof htmlString !== 'string') return htmlString;
   
   try {
+    // Normalize Outlook/MSO conditional comments and VML buttons so they render in browsers
+    const transformOutlookHtml = (html) => {
+      if (!html || typeof html !== 'string') return html;
+
+      // 1) Unwrap conditional MSO comments so their inner content is preserved
+      //    e.g. <!--[if mso]>...<![endif]-->  => ...
+      html = html.replace(/<!--[if[^\]]*\]>([\s\S]*?)<!\[endif\]-->/gi, '$1');
+
+      // 2) Convert common VML button patterns (<v:roundrect>...</v:roundrect>) to regular anchors
+      //    We try to preserve href and inner text.
+      html = html.replace(/<v:roundrect([\s\S]*?)>([\s\S]*?)<\/v:roundrect>/gi, (match, attrs, inner) => {
+        // find href attribute if present
+        const hrefMatch = attrs.match(/href=["']([^"']+)["']/i);
+        const href = hrefMatch ? hrefMatch[1] : '#';
+
+        // Strip any nested <v:*> tags and keep inner text/html
+        // Create a temporary div to extract text if necessary
+        try {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = inner;
+          // If there's an <a> inside, use its href
+          const a = tmp.querySelector('a');
+          const finalHref = a && a.getAttribute('href') ? a.getAttribute('href') : href;
+          // Get cleaned inner HTML/text
+          const display = tmp.textContent && tmp.textContent.trim() ? tmp.innerHTML : inner;
+          return `<a href="${finalHref}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:10px 16px;border-radius:4px;background:#ff9900;color:#ffffff;text-decoration:none;font-weight:700;">${display}</a>`;
+        } catch (e) {
+          return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:10px 16px;border-radius:4px;background:#ff9900;color:#ffffff;text-decoration:none;font-weight:700;">${inner}</a>`;
+        }
+      });
+
+      // 3) Convert common pattern where an <a> wraps a <button> (many mailers produce this)
+      //    e.g. <a href="..."><button style="...">Reply</button></a> => <a href="..." style="...">Reply</a>
+      html = html.replace(/<a([^>]*)>\s*<button([^>]*)>([\s\S]*?)<\/button>\s*<\/a>/gi, (match, aAttrs, btnAttrs, inner) => {
+        const hrefMatch = aAttrs.match(/href=["']([^"']+)["']/i);
+        const href = hrefMatch ? hrefMatch[1] : '#';
+        const aStyleMatch = aAttrs.match(/style=["']([^"']*)["']/i);
+        const btnStyleMatch = btnAttrs.match(/style=["']([^"']*)["']/i);
+        const defaultBtnStyle = 'display:inline-block;padding:0.6em 1.2em;background:#ff9900;color:#ffffff;border:none;border-radius:2px;text-decoration:none;font-weight:700;font-family:Lato,Calibri,Arial,sans-serif;font-size:1em;letter-spacing:1px;text-transform:uppercase;';
+        const combinedStyle = `${aStyleMatch ? aStyleMatch[1] + ';' : ''}${btnStyleMatch ? btnStyleMatch[1] + ';' : ''}${defaultBtnStyle}`;
+        try {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = inner;
+          const display = tmp.textContent && tmp.textContent.trim() ? tmp.innerHTML : inner;
+          return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="${combinedStyle}">${display}</a>`;
+        } catch (e) {
+          return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="${combinedStyle}">${inner}</a>`;
+        }
+      });
+
+      // 4) Convert standalone <button> tags to anchors (no href available)
+      html = html.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi, (match, btnAttrs, inner) => {
+        const btnStyleMatch = btnAttrs.match(/style=["']([^"']*)["']/i);
+        const defaultBtnStyle = 'display:inline-block;padding:0.6em 1.2em;background:#ff9900;color:#ffffff;border:none;border-radius:2px;text-decoration:none;font-weight:700;font-family:Lato,Calibri,Arial,sans-serif;font-size:1em;letter-spacing:1px;text-transform:uppercase;';
+        const combinedStyle = `${btnStyleMatch ? btnStyleMatch[1] + ';' : ''}${defaultBtnStyle}`;
+        try {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = inner;
+          const display = tmp.textContent && tmp.textContent.trim() ? tmp.innerHTML : inner;
+          return `<a href="#" style="${combinedStyle}">${display}</a>`;
+        } catch (e) {
+          return `<a href="#" style="${combinedStyle}">${inner}</a>`;
+        }
+      });
+
+      return html;
+    };
+
+    // Apply Outlook-specific transformations first
+    htmlString = transformOutlookHtml(htmlString);
     // Create a temporary container to parse HTML
     const temp = document.createElement('div');
     temp.innerHTML = htmlString;
