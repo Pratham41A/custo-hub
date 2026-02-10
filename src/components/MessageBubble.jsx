@@ -13,6 +13,52 @@ const formatDate = (date) => {
   });
 };
 
+// HTML Sanitization & Fixing Function
+const sanitizeAndFixHTML = (htmlString) => {
+  if (!htmlString || typeof htmlString !== 'string') return htmlString;
+  
+  try {
+    // Create a temporary container to parse HTML
+    const temp = document.createElement('div');
+    temp.innerHTML = htmlString;
+    
+    // Function to recursively remove dangerous elements and attributes
+    const sanitizeNode = (node) => {
+      if (node.nodeType === 3) return; // Text node - safe
+      if (node.nodeType === 8) {
+        node.remove(); // Remove comments
+        return;
+      }
+      
+      // List of dangerous tags
+      const dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'];
+      if (dangerousTags.includes(node.tagName?.toLowerCase())) {
+        node.remove();
+        return;
+      }
+      
+      // Remove dangerous attributes
+      const dangerousAttrs = ['onload', 'onerror', 'onmouseover', 'onclick', 'onchange', 'onfocus', 'onblur', 'ondblclick', 'onkeydown', 'onkeyup'];
+      const attrs = Array.from(node.attributes || []);
+      attrs.forEach(attr => {
+        if (dangerousAttrs.some(dangerous => attr.name.toLowerCase().startsWith(dangerous))) {
+          node.removeAttribute(attr.name);
+        }
+      });
+      
+      // Recursively sanitize children
+      Array.from(node.children || []).forEach(child => sanitizeNode(child));
+    };
+    
+    sanitizeNode(temp);
+    return temp.innerHTML;
+  } catch (error) {
+    console.error('HTML Sanitization error:', error);
+    // If sanitization fails, return escaped text
+    return htmlString.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+};
+
 // Get source icon/image URL
 const getSourceImage = (source) => {
   if (source === 'email') {
@@ -86,10 +132,11 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
     }
 
     if (contentType === 'html') {
+      const sanitizedHTML = sanitizeAndFixHTML(contentValue);
       return (
         <div
           style={{ fontSize: '13px', wordBreak: 'break-word' }}
-          dangerouslySetInnerHTML={{ __html: contentValue }}
+          dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
         />
       );
     }
@@ -232,10 +279,11 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
     }
 
     if (contentType === 'html') {
+      const sanitizedHTML = sanitizeAndFixHTML(contentValue);
       return (
         <div
           style={{ fontSize: '14px', wordBreak: 'break-word' }}
-          dangerouslySetInnerHTML={{ __html: contentValue }}
+          dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
         />
       );
     }
@@ -358,10 +406,10 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
       {msg.attachments && msg.attachments.length > 0 && (
         <div style={{ marginTop: '12px', paddingTop: '12px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {msg.attachments.map((attachment, idx) => (
+            {msg.attachments.filter(a => a).map((attachment, idx) => (
               <a
                 key={idx}
-                href={attachment.url || attachment}
+                href={attachment?.url || attachment}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -389,7 +437,7 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
         <span style={{ fontSize: '11px', opacity: 0.7 }}>
           {formatDate(msg.messageDateTime || msg.createdAt)}
         </span>
-        {!isSent && isStarted && onReply && (
+        {!isSent && onReply && (
           <button
             style={{
               background: 'transparent',

@@ -23,6 +23,7 @@ export function ContextPanel({ inbox, onClose }) {
   if (!inbox) return null;
 
   const user = inbox.owner || inbox.dummyOwner || {};
+  const userId = user._id || inbox.owner?._id || inbox.dummyOwner?._id;
   const inboxId = inbox._id;
   const isOwner = !!inbox.owner;
   
@@ -55,13 +56,13 @@ export function ContextPanel({ inbox, onClose }) {
   };
 
   const loadDataForModal = async (type) => {
-    if (!inboxId) return;
+    if (!userId) return;
     setLoadingData(true);
     try {
       let result;
-      if (type === 'subscription') result = await fetchUserSubscriptions(inboxId, 20);
-      if (type === 'payment') result = await fetchUserPayments(inboxId, 20);
-      if (type === 'view') result = await fetchUserViews(inboxId, 20);
+      if (type === 'subscription') result = await fetchUserSubscriptions(userId, 20);
+      if (type === 'payment') result = await fetchUserPayments(userId, 20);
+      if (type === 'view') result = await fetchUserViews(userId, 20);
       if (type === 'notes') result = await fetchUserActivities(inboxId, 20);
       if (result?.pagination) setPagination(result.pagination);
     } finally {
@@ -279,7 +280,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Subscriptions - {getDisplayName()} ({subscriptions.length})</span>
+              <span>Subscriptions - {getDisplayName()} ({Array.isArray(subscriptions) ? subscriptions.length : 0})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -290,32 +291,32 @@ export function ContextPanel({ inbox, onClose }) {
                   <thead>
                     <tr>
                       <th style={thStyle}>Package</th>
-                      <th style={thStyle}>Plan</th>
-                      <th style={thStyle}>Method</th>
+                      <th style={thStyle}>Duration</th>
+                      <th style={thStyle}>Amount</th>
                       <th style={thStyle}>Status</th>
-                      <th style={thStyle}>Start</th>
-                      <th style={thStyle}>End</th>
+                      <th style={thStyle}>End Date</th>
+                      <th style={thStyle}>Method</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {subscriptions.map((sub) => {
-                      const planValue = sub.packageId?.planType ?? sub.planType ?? sub.plan ?? null;
+                    {(Array.isArray(subscriptions) ? subscriptions : []).map((sub) => {
+                      const duration = sub.packageId?.subscriptionDurationWeb || '-';
                       return (
                         <tr key={sub._id}>
                           <td style={tdStyle}>{sub.packageId?.packageName || '-'}</td>
-                          <td style={tdStyle}>{planValue != null ? String(planValue) : '-'}</td>
-                          <td style={tdStyle}>{sub.paymentmethod}</td>
+                          <td style={tdStyle}>{duration} months</td>
+                          <td style={tdStyle}>{sub.currencytype} {sub.amountpaid || 0}</td>
                           <td style={tdStyle}>
                             <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: sub.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: sub.status === 'active' ? '#10b981' : '#ef4444', textTransform: 'capitalize' }}>
                               {sub.status}
                             </span>
                           </td>
-                          <td style={tdStyle}>{formatDate(sub.startDate)}</td>
                           <td style={tdStyle}>{formatDate(sub.endDate)}</td>
+                          <td style={tdStyle}>{sub.paymentmethod || '-'}</td>
                         </tr>
                       );
                     })}
-                    {subscriptions.length === 0 && (
+                    {(!Array.isArray(subscriptions) || subscriptions.length === 0) && (
                       <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No subscriptions</td></tr>
                     )}
                   </tbody>
@@ -331,7 +332,7 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Payments - {getDisplayName()} ({payments.length})</span>
+              <span>Payments - {getDisplayName()} ({Array.isArray(payments) ? payments.length : 0})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
             <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
@@ -343,21 +344,22 @@ export function ContextPanel({ inbox, onClose }) {
                     <tr>
                       <th style={thStyle}>Course</th>
                       <th style={thStyle}>Amount</th>
-                      <th style={thStyle}>Method</th>
+                      <th style={thStyle}>Payment Method</th>
                       <th style={thStyle}>Date</th>
+                      <th style={thStyle}>Coupon</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {payments.map((p) => (
+                    {(Array.isArray(payments) ? payments : []).map((p) => (
                       <tr key={p._id}>
-                        <td style={tdStyle}>{p.coursename || '-'}</td>
-                        <td style={tdStyle}>{p.currencytype} {p.amountpaid}</td>
-                        <td style={tdStyle}>{p.transactionid || p.transactionId || '-'}</td>
-                        <td style={tdStyle}>{p.paymentmethod}</td>
+                        <td style={tdStyle}>{p.coursename || p.courseid?.coursename || '-'}</td>
+                        <td style={tdStyle}>{p.currencytype} {p.amountpaid || 0}</td>
+                        <td style={tdStyle}>{p.paymentmethod || '-'}</td>
                         <td style={tdStyle}>{formatDate(p.whenentered)}</td>
+                        <td style={tdStyle}>{p.couponcode || '-'}</td>
                       </tr>
                     ))}
-                    {payments.length === 0 && (
+                    {(!Array.isArray(payments) || payments.length === 0) && (
                       <tr><td colSpan={5} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No payments</td></tr>
                     )}
                   </tbody>
@@ -385,8 +387,9 @@ export function ContextPanel({ inbox, onClose }) {
                     <tr>
                       <th style={thStyle}>Course</th>
                       <th style={thStyle}>Sub Course</th>
-                      <th style={thStyle}>Duration</th>
-                      <th style={thStyle}>Progress</th>
+                      <th style={thStyle}>Views</th>
+                      <th style={thStyle}>Video Duration</th>
+                      <th style={thStyle}>Progress %</th>
                       <th style={thStyle}>Device</th>
                       <th style={thStyle}>Last Seen</th>
                     </tr>
@@ -398,17 +401,18 @@ export function ContextPanel({ inbox, onClose }) {
                       const pct = !isNaN(parsed) ? parsed : null;
                       return (
                         <tr key={v._id}>
-                          <td style={tdStyle}>{v.coursename || v.courseid?.coursename || '-'}</td>
-                          <td style={tdStyle}>{v.subcoursename || '-'}</td>
-                          <td style={tdStyle}>{v.durationofvideo}</td>
+                          <td style={tdStyle}>{v.courseid?.coursename || '-'}</td>
+                          <td style={tdStyle}>{v.subcourseid?.name || '-'}</td>
+                          <td style={tdStyle}>{v.courseid?.views || '0'}</td>
+                          <td style={tdStyle}>{v.durationofvideo || '-'}</td>
                           <td style={tdStyle}>{pct != null ? `${pct.toFixed(2)}%` : '-'}</td>
-                          <td style={tdStyle}>{v.devices}</td>
+                          <td style={tdStyle}>{v.devices || '-'}</td>
                           <td style={tdStyle}>{formatDate(v.lastseen)}</td>
                         </tr>
                       );
                     })}
                     {(!Array.isArray(views) || views.length === 0) && (
-                      <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No views</td></tr>
+                      <tr><td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No views</td></tr>
                     )}
                   </tbody>
                 </table>

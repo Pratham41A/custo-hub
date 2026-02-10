@@ -143,7 +143,7 @@ export const useGlobalStore = create((set, get) => ({
   fetchUserSubscriptions: async (userId) => {
     try {
       const response = await apiService.getSubscriptions(userId);
-      const subs = response.data || response || [];
+      const subs = response.subscriptions || response.data || response || [];
       set({ subscriptions: subs });
       return { data: subs };
     } catch (error) {
@@ -155,7 +155,7 @@ export const useGlobalStore = create((set, get) => ({
   fetchUserPayments: async (userId) => {
     try {
       const response = await apiService.getPayments(userId);
-      const payments = response.data || response || [];
+      const payments = response.payments || response.data || response || [];
       set({ payments });
       return { data: payments };
     } catch (error) {
@@ -167,7 +167,8 @@ export const useGlobalStore = create((set, get) => ({
   fetchUserViews: async (userId) => {
     try {
       const response = await apiService.getViews(userId);
-      const viewsData = response.data || response || [];
+      // API returns { count, videoTracks } structure
+      const viewsData = response.videoTracks || response.views || response.data || response || [];
       // Ensure views is always an array
       const views = Array.isArray(viewsData) ? viewsData : [];
       set({ views });
@@ -307,7 +308,7 @@ export const useGlobalStore = create((set, get) => ({
     const { dashboardData } = get();
     
     if (dashboardData) {
-      const statusKeys = ['unread', 'read', 'started', 'resolved'];
+      const statusKeys = ['unread', 'read', 'resolved'];
       const channelKeys = ['whatsapp', 'email', 'web'];
       
       // Extract channels
@@ -323,7 +324,6 @@ export const useGlobalStore = create((set, get) => ({
       return {
         unread: dashboardData.unread || 0,
         read: dashboardData.read || 0,
-        started: dashboardData.started || 0,
         resolved: dashboardData.resolved || 0,
         channels,
         queryTypes,
@@ -333,7 +333,6 @@ export const useGlobalStore = create((set, get) => ({
     return {
       unread: 0,
       read: 0,
-      started: 0,
       resolved: 0,
       channels: [],
       queryTypes: [],
@@ -357,10 +356,9 @@ export const useGlobalStore = create((set, get) => ({
   handleInboxCreated: (inbox) => set((state) => {
     const exists = state.inboxes.some(i => i._id === inbox._id);
     if (exists) return state;
-    // Ensure new inboxes have isUnread set to true
+    // Ensure new inboxes have status set to 'unread' by default
     const newInbox = {
       ...inbox,
-      isUnread: inbox.isUnread !== undefined ? inbox.isUnread : true,
       status: inbox.status || 'unread',
     };
     return {

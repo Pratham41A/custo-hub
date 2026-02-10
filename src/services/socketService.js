@@ -109,7 +109,6 @@ class SocketService {
         // Prepare inbox data - merge with defaults for missing fields
         let inboxData = {
           ...data,
-          isUnread: data.isUnread !== undefined ? data.isUnread : true,
           status: data.status || 'unread',
           inboxDateTime: data.inboxDateTime || data.updatedAt || new Date().toISOString(),
         };

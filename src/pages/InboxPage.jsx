@@ -25,7 +25,6 @@ const statusFilters = [
   { value: 'all', label: 'All' },
   { value: 'unread', label: 'Unread' },
   { value: 'read', label: 'Read' },
-  { value: 'started', label: 'Started' },
   { value: 'resolved', label: 'Resolved' },
 ];
 
@@ -69,8 +68,18 @@ export default function InboxPage() {
   const messagesEndRef = useRef(null);
   const messageRefsMap = useRef({});
 
-  useEffect(() => { loadInboxes(); }, [activeFilter]);
+  useEffect(() => { 
+    loadInboxes();
+    setSelectedInbox(null);
+    setShowContextPanel(false);
+  }, [activeFilter]);
   useEffect(() => { fetchQueryTypes(); }, [fetchQueryTypes]);
+
+  // Reset reply UI when selected inbox changes so reply section re-renders
+  useEffect(() => {
+    setReplyingToId(null);
+    setReplyForm({ body: '', template: '' });
+  }, [selectedInbox?._id]);
 
   // Socket.io event listeners for real-time updates
   useEffect(() => {
@@ -209,7 +218,7 @@ export default function InboxPage() {
     return 0;
   };
 
-  const statusOrder = { unread: 0, read: 1, started: 2, resolved: 3 };
+  const statusOrder = { unread: 0, read: 1, resolved: 2 };
 
   // Determine a reliable timestamp for an inbox item using updatedAt, falling back to createdAt
   const getItemTimestamp = (item) => {
@@ -307,12 +316,8 @@ export default function InboxPage() {
       );
     })
     .sort((a, b) => {
-      // First, sort by isUnread: unread inboxes come first
-      if (a.isUnread !== b.isUnread) {
-        return b.isUnread ? 1 : -1; // true (unread) comes before false (read)
-      }
-
-      // Then sort by status order
+      // First, sort by status order (unread comes first)
+      const statusOrder = { unread: 0, read: 1, resolved: 2 };
       const orderA = statusOrder[a.status] ?? 999;
       const orderB = statusOrder[b.status] ?? 999;
       if (orderA !== orderB) return orderA - orderB;
@@ -356,7 +361,7 @@ export default function InboxPage() {
       const msgData = await fetchMessages(inbox._id);
       
       // Mark as read if unread - use API response data
-      if (inbox.isUnread) {
+      if (inbox.status === 'unread') {
         // Call API and get updated inbox data from response
         const updatedInboxData = await updateInboxStatus(inbox._id, 'read');
         
@@ -373,14 +378,7 @@ export default function InboxPage() {
     }
   };
 
-  const handleStart = async () => {
-    if (!selectedInbox) return;
-    try {
-      await updateInboxStatus(selectedInbox._id, 'started');
-      showToast('Conversation started', 'success');
-    } catch { showToast('Failed to start', 'error'); }
-  };
-
+  
   const handleResolve = async () => {
     const queryType = modal.data.customQuery || modal.data.queryType;
     if (!selectedInbox || !queryType) return;
@@ -570,10 +568,10 @@ export default function InboxPage() {
 
   const getUser = (inbox) => inbox?.owner || inbox?.dummyOwner || {};
   const canShowActions = selectedInbox && selectedInbox.status !== 'resolved';
-  const isStarted = selectedInbox && ['started', 'pending'].includes(selectedInbox.status);
+  const isStarted = selectedInbox && ['pending'].includes(selectedInbox.status);
 
   const getStatusColor = (status) => {
-    const colors = { unread: '#f59e0b', read: '#3b82f6', started: '#8b5cf6', resolved: '#10b981', pending: '#ef4444' };
+    const colors = { unread: '#f59e0b', read: '#3b82f6', resolved: '#10b981', pending: '#ef4444' };
     return colors[status] || '#64748b';
   };
 
@@ -582,7 +580,7 @@ export default function InboxPage() {
   const listPanelStyle = { width: '360px', borderRight: '1px solid rgba(0,0,0,0.08)', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px -12px rgba(0,0,0,0.1)' };
   const listHeaderStyle = { padding: '24px', borderBottom: '1px solid rgba(0,0,0,0.08)' };
   const filterBtnStyle = (active) => ({ padding: '6px 12px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', border: 'none', background: active ? '#6366f1' : 'rgba(0,0,0,0.04)', color: active ? '#fff' : '#374151', cursor: 'pointer', transition: 'all 0.2s' });
-  const inboxItemStyle = (isSelected, isUnread) => ({ padding: '16px', marginBottom: '8px', borderRadius: '12px', cursor: 'pointer', border: isSelected ? '1px solid #6366f1' : '1px solid transparent', background: isSelected ? 'rgba(99, 102, 241, 0.06)' : isUnread ? 'rgba(245, 158, 11, 0.04)' : '#fff', transition: 'all 0.2s' });
+  const inboxItemStyle = (isSelected, status) => ({ padding: '16px', marginBottom: '8px', borderRadius: '12px', cursor: 'pointer', border: isSelected ? '1px solid #6366f1' : '1px solid transparent', background: isSelected ? 'rgba(99, 102, 241, 0.06)' : status === 'unread' ? 'rgba(245, 158, 11, 0.04)' : '#fff', transition: 'all 0.2s' });
   const avatarStyle = (color) => ({ width: '44px', height: '44px', borderRadius: '12px', background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '14px' });
   const chipStyle = (color) => ({ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: `${color}15`, color, textTransform: 'capitalize' });
   const messagePanelStyle = { flex: 1, display: 'flex', flexDirection: 'column', background: '#fafbfc' };
@@ -634,7 +632,7 @@ export default function InboxPage() {
                 onMouseLeave={(e) => e.target.style.background = '#6366f1'}
                 title="Compose new message"
               >
-                +
+                <img src="https://api.iconify.design/fluent:compose-48-regular.svg" alt="compose" style={{ width: '20px', height: '20px', filter: 'invert(1)' }} />
               </button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -668,17 +666,17 @@ export default function InboxPage() {
                       padding: '14px 16px',
                       marginBottom: '10px',
                       borderRadius: '12px',
-                      background: isSelected ? 'rgba(99, 102, 241, 0.08)' : inbox.isUnread ? '#fef9e7' : '#fff',
-                      border: isSelected ? '2px solid #6366f1' : inbox.isUnread ? '1px solid #fcd34d' : '1px solid #e2e8f0',
+                      background: isSelected ? 'rgba(99, 102, 241, 0.08)' : inbox.status === 'unread' ? '#fef9e7' : '#fff',
+                      border: isSelected ? '2px solid #6366f1' : inbox.status === 'unread' ? '1px solid #fcd34d' : '1px solid #e2e8f0',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      boxShadow: isSelected ? '0 4px 12px rgba(99, 102, 241, 0.15)' : inbox.isUnread ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                      boxShadow: isSelected ? '0 4px 12px rgba(99, 102, 241, 0.15)' : inbox.status === 'unread' ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
                       display: 'flex',
                       gap: '14px',
                       alignItems: 'flex-start'
                     }}
-                    onMouseEnter={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.isUnread ? '0 4px 12px rgba(252, 211, 77, 0.3)' : '0 2px 8px rgba(0,0,0,0.1)')}
-                    onMouseLeave={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.isUnread ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)')}
+                    onMouseEnter={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.status === 'unread' ? '0 4px 12px rgba(252, 211, 77, 0.3)' : '0 2px 8px rgba(0,0,0,0.1)')}
+                    onMouseLeave={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.status === 'unread' ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)')}
                   >
                     {/* Avatar with Channel Icon */}
                     <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -714,7 +712,7 @@ export default function InboxPage() {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                         <span 
                           style={{
-                            fontWeight: inbox.isUnread ? 700 : 600,
+                            fontWeight: inbox.status === 'unread' ? 700 : 600,
                             fontSize: '13px',
                             color: '#0f172a',
                             minWidth: 0,
@@ -746,8 +744,8 @@ export default function InboxPage() {
                       <div 
                         style={{
                           fontSize: '12px',
-                          color: inbox.isUnread ? '#7c2d12' : '#64748b',
-                          fontWeight: inbox.isUnread ? 500 : 400,
+                          color: inbox.status === 'unread' ? '#7c2d12' : '#64748b',
+                          fontWeight: inbox.status === 'unread' ? 500 : 400,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
@@ -772,20 +770,33 @@ export default function InboxPage() {
                         )}
                       </div>
 
-                      {/* Bottom Row: DateTime */}
-                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                        {formatDate(inbox.inboxDateTime)}
-                      </span>
+                      {/* Bottom Row: DateTime and updatedAt */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '12px', color: '#94a3b8' }}>{formatDate(inbox.inboxDateTime)}</div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '8px' }}>{inbox.updatedAt ? formatDate(inbox.updatedAt) : ''}</div>
+                      </div>
                     </div>
 
-                    {/* Unread Indicator */}
-                    {inbox.isUnread && (
+                    {/* Status Indicator */}
+                    {inbox.status === 'unread' && (
                       <div 
                         style={{
                           width: '8px',
                           height: '8px',
                           borderRadius: '50%',
                           background: '#f59e0b',
+                          flexShrink: 0,
+                          marginTop: '6px'
+                        }}
+                      />
+                    )}
+                    {inbox.status === 'resolved' && (
+                      <div 
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#10b981',
                           flexShrink: 0,
                           marginTop: '6px'
                         }}
@@ -809,22 +820,35 @@ export default function InboxPage() {
                   </div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '15px' }}>{getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'Unknown User'}</div>
-                    <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div>{selectedInbox?.owner?.email || selectedInbox?.dummyOwner?.email || ''}</div>
+                      <div style={{ opacity: 0.9 }}>{selectedInbox?.updatedAt ? formatDate(selectedInbox.updatedAt) : (selectedInbox?.inboxDateTime ? formatDate(selectedInbox.inboxDateTime) : '')}</div>
                     </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-    
+
                   {canShowActions && (
                     <>
-                      {!isStarted ? (
-                        <button style={buttonStyle('#000000', '#ffffff')} onClick={handleStart}>Start</button>
-                      ) : (
-                        <button style={buttonStyle('#000000', '#fbfbfb')} onClick={() => setModal({ type: 'resolve', data: {} })}>Resolve</button>
-                      )}
+                      <button
+                        style={buttonStyle('transparent', '#374151')}
+                        onClick={async () => {
+                          if (!selectedInbox) return;
+                          try {
+                            const updated = await updateInboxStatus(selectedInbox._id, 'unread');
+                            // Update inboxes list and selected inbox
+                            setInboxes(inboxes.map(i => i._id === selectedInbox._id ? { ...i, ...updated } : i));
+                            setSelectedInbox(prev => prev ? { ...prev, ...updated } : prev);
+                            showToast('Marked as unread', 'info');
+                          } catch (e) { showToast('Failed to mark unread', 'error'); }
+                        }}
+                      >
+                        Mark Unread
+                      </button>
+                      <button style={buttonStyle('#000000', '#fbfbfb')} onClick={() => setModal({ type: 'resolve', data: {} })}>Resolve</button>
                     </>
                   )}
-               
+
                   <button style={buttonStyle('transparent', '#374151')} onClick={() => setModal({ type: 'note', data: {} })}>Add Note</button>
                      {!showContextPanel && (
                     <button 
@@ -865,115 +889,111 @@ export default function InboxPage() {
               </div>
 
               <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', padding: '16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {isStarted && (
-                  <>
-                    {/* Inline Reply Form - Shows when reply button is clicked */}
-                    {replyingToId && (
-                      <div style={{ 
-                        borderRadius: '12px', 
-                        border: '1px solid rgba(99, 102, 241, 0.3)', 
-                        padding: '16px', 
-                        background: 'rgba(99, 102, 241, 0.04)', 
-                        overflow: 'auto' 
-                      }}>
-                        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
-                      
-                      {/* Get the message being replied to */}
-                      {inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' ? (
-                        <>
-                          {/* For WhatsApp always show template selector button */}
-                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                            <button
-                              style={buttonStyle('transparent', '#050c18')}
-                              onClick={() => {
-                                setReplyingToId(null);
-                                setReplyForm({ body: '', template: '' });
-                              }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              style={buttonStyle('#6366f1', '#fff')}
-                              onClick={() => {
-                                setReplyingToId(null);
-                                setReplyForm({ body: '', template: '' });
-                                const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile;
-                                setModal({ type: 'whatsapp-reply-template', data: { mobile, messageId: replyingToId } });
-                              }}
-                              disabled={sending}
-                            >
-                              {sending ? <span className="spinner spinner-white" /> : 'Select Template'}
-                            </button>
-                          </div>
-                        </>
-                      ) : inboxMessages.find(m => m._id === replyingToId)?.source === 'web' ? (
-                        <>
-                          <div style={{ marginBottom: '12px' }}>
-                            
-                            <textarea
-                              style={textareaStyle}
-                             
-                              value={replyForm.body || ''}
-                              onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
-                            />
-                          </div>
-                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                            <button
-                              style={buttonStyle('transparent', '#050c18')}
-                              onClick={() => {
-                                setReplyingToId(null);
-                                setReplyForm({ body: '', template: '' });
-                              }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              style={buttonStyle('#6366f1', '#fff')}
-                              onClick={() => {
-                                const msg = inboxMessages.find(m => m._id === replyingToId);
-                                handleInlineReply(msg, msg?.source !== 'whatsapp');
-                              }}
-                              disabled={sending}
-                            >
-                              {sending ? <span className="spinner spinner-white" /> : 'Reply'}
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div style={{ marginBottom: '12px' }}>
-                            <EmailEditor
-                              value={replyForm.body || ''}
-                              onChange={(value) => setReplyForm({ ...replyForm, body: value })}
-               
-                            />
-                          </div>
-                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                            <button
-                              style={buttonStyle('transparent', '#050c18')}
-                              onClick={() => {
-                                setReplyingToId(null);
-                                setReplyForm({ body: '', template: '' });
-                              }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              style={buttonStyle('#6366f1', '#fff')}
-                              onClick={() => {
-                                const msg = inboxMessages.find(m => m._id === replyingToId);
-                                handleInlineReply(msg, msg?.source !== 'whatsapp');
-                              }}
-                              disabled={sending}
-                            >
-                              {sending ? <span className="spinner spinner-white" /> : 'Reply'}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  </>
+                  {/* Inline Reply Form - Shows when reply button is clicked */}
+                  {replyingToId && (
+                    <div style={{ 
+                      borderRadius: '12px', 
+                      border: '1px solid rgba(99, 102, 241, 0.3)', 
+                      padding: '16px', 
+                      background: 'rgba(99, 102, 241, 0.04)', 
+                      overflow: 'auto' 
+                    }}>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
+                    
+                    {/* Get the message being replied to */}
+                    {inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' ? (
+                      <>
+                        {/* For WhatsApp always show template selector button */}
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                          <button
+                            style={buttonStyle('transparent', '#050c18')}
+                            onClick={() => {
+                              setReplyingToId(null);
+                              setReplyForm({ body: '', template: '' });
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            style={buttonStyle('#6366f1', '#fff')}
+                            onClick={() => {
+                              setReplyingToId(null);
+                              setReplyForm({ body: '', template: '' });
+                              const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile;
+                              setModal({ type: 'whatsapp-reply-template', data: { mobile, messageId: replyingToId } });
+                            }}
+                            disabled={sending}
+                          >
+                            {sending ? <span className="spinner spinner-white" /> : 'Select Template'}
+                          </button>
+                        </div>
+                      </>
+                    ) : inboxMessages.find(m => m._id === replyingToId)?.source === 'web' ? (
+                      <>
+                        <div style={{ marginBottom: '12px' }}>
+                          
+                          <textarea
+                            style={textareaStyle}
+                           
+                            value={replyForm.body || ''}
+                            onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                          <button
+                            style={buttonStyle('transparent', '#050c18')}
+                            onClick={() => {
+                              setReplyingToId(null);
+                              setReplyForm({ body: '', template: '' });
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            style={buttonStyle('#6366f1', '#fff')}
+                            onClick={() => {
+                              const msg = inboxMessages.find(m => m._id === replyingToId);
+                              handleInlineReply(msg, msg?.source !== 'whatsapp');
+                            }}
+                            disabled={sending}
+                          >
+                            {sending ? <span className="spinner spinner-white" /> : 'Reply'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ marginBottom: '12px' }}>
+                          <EmailEditor
+                            value={replyForm.body || ''}
+                            onChange={(value) => setReplyForm({ ...replyForm, body: value })}
+             
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                          <button
+                            style={buttonStyle('transparent', '#050c18')}
+                            onClick={() => {
+                              setReplyingToId(null);
+                              setReplyForm({ body: '', template: '' });
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            style={buttonStyle('#6366f1', '#fff')}
+                            onClick={() => {
+                              const msg = inboxMessages.find(m => m._id === replyingToId);
+                              handleInlineReply(msg, msg?.source !== 'whatsapp');
+                            }}
+                            disabled={sending}
+                          >
+                            {sending ? <span className="spinner spinner-white" /> : 'Reply'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
 
                 {/* Compose Buttons Section - Bottom Right - Always Visible */}

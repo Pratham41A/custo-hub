@@ -107,7 +107,7 @@ class ApiService {
     });
   }
 
-  // Activities - GET /activities/:userId
+  // Activities - GET /activities/:inboxId
   async getActivities(inboxId, limit = 10) {
     return this.request(`/activities/${inboxId}`, {
       method: 'GET',
