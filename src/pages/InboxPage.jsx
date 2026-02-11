@@ -640,8 +640,8 @@ export default function InboxPage() {
   const avatarStyle = (color) => ({ width: '44px', height: '44px', borderRadius: '12px', background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '14px' });
   const chipStyle = (color) => ({ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: `${color}15`, color, textTransform: 'capitalize' });
   const messagePanelStyle = { flex: 1, display: 'flex', flexDirection: 'column', background: '#fafbfc' };
-  const threadHeaderStyle = { height: '72px', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
-  const buttonStyle = (bg, color) => ({ display: 'inline-flex', alignItems: 'center', padding: '5px 5px', borderRadius: '5px', fontSize: '10px', fontWeight: 600, border: bg === 'transparent' ? '1px solid rgba(0,0,0,0.15)' : 'none', background: bg, color, cursor: 'pointer', transition: 'all 0.2s' });
+  const threadHeaderStyle = { minHeight: '72px', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
+  const buttonStyle = (bg, color) => ({ display: 'inline-flex', alignItems: 'center', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, border: bg === 'transparent' ? '1px solid rgba(0,0,0,0.15)' : 'none', background: bg, color, cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' });
   const messageStyle = (isOutgoing) => ({ maxWidth: '70%', marginBottom: '16px', marginLeft: isOutgoing ? 'auto' : 0, padding: '16px', borderRadius: '16px', background: isOutgoing ? '#6366f1' : '#fff', color: isOutgoing ? '#fff' : '#0f172a', boxShadow: isOutgoing ? '0 4px 12px rgba(99, 102, 241, 0.3)' : '0 2px 8px rgba(0,0,0,0.08)' });
   const modalOverlayStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 };
   const modalStyle = { background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', overflow: 'hidden' };
@@ -870,43 +870,51 @@ export default function InboxPage() {
           {selectedInbox ? (
             <>
               <div style={threadHeaderStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: 0 }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, flexShrink: 0 }}>
                     {(getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2)}
                   </div>
-                  <div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: '15px' }}>{getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'Unknown User'}</div>
-                    <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       <div>{selectedInbox?.owner?.email || selectedInbox?.dummyOwner?.email || ''}</div>
                       <div style={{ opacity: 0.9 }}>{selectedInbox?.updatedAt ? formatDate(selectedInbox.updatedAt) : (selectedInbox?.inboxDateTime ? formatDate(selectedInbox.inboxDateTime) : '')}</div>
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
 
-                  {canShowActions && (
-                    <>
-                      <button
-                        style={buttonStyle('transparent', '#374151')}
-                        onClick={async () => {
-                          if (!selectedInbox) return;
-                          try {
-                            const updated = await updateInboxStatus(selectedInbox._id, 'unread');
-                            // Update inboxes list and selected inbox
-                            setInboxes(inboxes.map(i => i._id === selectedInbox._id ? { ...i, ...updated } : i));
-                            setSelectedInbox(prev => prev ? { ...prev, ...updated } : prev);
-                            showToast('Marked as unread', 'info');
-                          } catch (e) { showToast('Failed to mark unread', 'error'); }
-                        }}
-                      >
-                        Mark Unread
-                      </button>
-                      <button style={buttonStyle('#000000', '#fbfbfb')} onClick={() => setModal({ type: 'resolve', data: {} })}>Resolve</button>
-                    </>
+                  {/* Display queryType before Mark Unread */}
+                  {selectedInbox?.queryType && (
+                    <div style={{ fontSize: '12px', color: '#7c2d12', fontWeight: 500, padding: '4px 8px', background: '#fef08a', borderRadius: '4px' }}>
+                      {selectedInbox.queryType}
+                    </div>
                   )}
 
+                  {canShowActions && (
+                    <button
+                      style={buttonStyle('transparent', '#374151')}
+                      onClick={async () => {
+                        if (!selectedInbox) return;
+                        try {
+                          const updated = await updateInboxStatus(selectedInbox._id, 'unread');
+                          // Update inboxes list and selected inbox
+                          setInboxes(inboxes.map(i => i._id === selectedInbox._id ? { ...i, ...updated } : i));
+                          setSelectedInbox(prev => prev ? { ...prev, ...updated } : prev);
+                          showToast('Marked as unread', 'info');
+                        } catch (e) { showToast('Failed to mark unread', 'error'); }
+                      }}
+                    >
+                      Mark Unread
+                    </button>
+                  )}
+
+                  {/* Always show Resolve button */}
+                  <button style={buttonStyle('#000000', '#fbfbfb')} onClick={() => setModal({ type: 'resolve', data: {} })}>Resolve</button>
+
                   <button style={buttonStyle('transparent', '#374151')} onClick={() => setModal({ type: 'note', data: {} })}>Add Note</button>
-                     {!showContextPanel && (
+                     
+                  {!showContextPanel && (
                     <button 
                       style={buttonStyle('transparent', '#374151')} 
                       onClick={() => setShowContextPanel(true)}
