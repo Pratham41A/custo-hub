@@ -97,7 +97,8 @@ class SocketService {
     });
 
     // Listen for inbox updates - play notification and update state
-    this.socket.on('inbox', (data) => {
+    this.socket.on('message', (data) => {
+      alert('New Message Received')
       this.playNotificationSound();
       this.showNotificationAlert('New Inbox', `New message received`);
       
