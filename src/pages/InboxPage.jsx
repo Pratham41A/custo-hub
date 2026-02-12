@@ -75,33 +75,45 @@ export default function InboxPage() {
   }, [activeFilter]);
   useEffect(() => { fetchQueryTypes(); }, [fetchQueryTypes]);
 
-  // Helper: resolve mobile number from multiple possible locations
+  // Helper: resolve and format mobile number with country code from multiple possible locations
+  // Returns concatenated countrycode + mobileno (e.g., "+919920292920" or "919920292920")
   const resolveMobile = (inbox, message) => {
     // Check inbox.owner first
     const owner = inbox?.owner;
     const dummyInbox = inbox?.dummyOwner;
 
+    // Define candidates with their corresponding countrycode sources
     const candidates = [
-      owner?.mobileno,
-      owner?.mobile,
-      owner?.dummyOwner?.mobileno,
-      owner?.dummyOwner?.mobile,
-      dummyInbox?.mobileno,
-      dummyInbox?.mobile,
+      { mobile: owner?.mobileno, code: owner?.countrycode },
+      { mobile: owner?.mobile, code: owner?.countrycode },
+      { mobile: owner?.dummyOwner?.mobileno, code: owner?.dummyOwner?.countrycode },
+      { mobile: owner?.dummyOwner?.mobile, code: owner?.dummyOwner?.countrycode },
+      { mobile: dummyInbox?.mobileno, code: dummyInbox?.countrycode },
+      { mobile: dummyInbox?.mobile, code: dummyInbox?.countrycode },
       // Message-level fallbacks
-      message?.owner?.mobileno,
-      message?.owner?.mobile,
-      message?.owner?.dummyOwner?.mobileno,
-      message?.owner?.dummyOwner?.mobile,
-      message?.dummyOwner?.mobileno,
-      message?.dummyOwner?.mobile,
+      { mobile: message?.owner?.mobileno, code: message?.owner?.countrycode },
+      { mobile: message?.owner?.mobile, code: message?.owner?.countrycode },
+      { mobile: message?.owner?.dummyOwner?.mobileno, code: message?.owner?.dummyOwner?.countrycode },
+      { mobile: message?.owner?.dummyOwner?.mobile, code: message?.owner?.dummyOwner?.countrycode },
+      { mobile: message?.dummyOwner?.mobileno, code: message?.dummyOwner?.countrycode },
+      { mobile: message?.dummyOwner?.mobile, code: message?.dummyOwner?.countrycode },
       // Some payloads might include mobile directly
-      message?.mobile,
-      message?.mobileno,
+      { mobile: message?.mobile, code: message?.countrycode },
+      { mobile: message?.mobileno, code: message?.countrycode },
     ];
 
-    for (const c of candidates) {
-      if (c) return c;
+    for (const candidate of candidates) {
+      if (candidate.mobile) {
+        const mobileno = candidate.mobile.toString().trim();
+        const countrycode = (candidate.code || '').toString().trim();
+        
+        // Concatenate country code with mobile number
+        // If countrycode already has +, use it as is; otherwise prepend it
+        if (countrycode) {
+          return countrycode + mobileno;
+        }
+        return mobileno;
+      }
     }
     return undefined;
   };
@@ -481,13 +493,13 @@ export default function InboxPage() {
       const isWhatsApp = msg?.source === 'whatsapp';
       console.log('Reply Debug:', { isWhatsApp, msg, owner: selectedInbox.owner, ownerKeys: Object.keys(selectedInbox.owner || {}) });
       if (isWhatsApp && modal.data.template) {
-        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobileno || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobileno || selectedInbox.dummyOwner?.mobile;
+        const mobile = resolveMobile(selectedInbox, null);
         console.log('Owner object properties:', selectedInbox.owner);
         console.log('Sending WhatsApp template reply:', { mobile, template: modal.data.template });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappTemplate(mobile, modal.data.template);
       } else if (isWhatsApp && modal.data.body) {
-        const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobileno || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobileno || selectedInbox.dummyOwner?.mobile;
+        const mobile = resolveMobile(selectedInbox, null);
         console.log('Sending WhatsApp message reply:', { mobile, body: modal.data.body });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappMessage(mobile, modal.data.body);
@@ -985,7 +997,7 @@ export default function InboxPage() {
                               onClick={() => {
                                 setReplyingToId(null);
                                 setReplyForm({ body: '', template: '' });
-                                const mobile = selectedInbox.owner?.mobileno || selectedInbox.owner?.mobile || selectedInbox.owner?.dummyOwner?.mobileno || selectedInbox.owner?.dummyOwner?.mobile || selectedInbox.dummyOwner?.mobileno || selectedInbox.dummyOwner?.mobile;
+                                const mobile = resolveMobile(selectedInbox, null);
                                 setModal({ type: 'whatsapp-reply-template', data: { mobile, messageId: replyingToId } });
                               }}
                               disabled={sending}
@@ -1135,7 +1147,7 @@ export default function InboxPage() {
                         transition: 'all 0.2s',
                       }}
                       onClick={() => {
-                        const mobile = selectedInbox.owner?.mobile || selectedInbox.owner?.mobileno || selectedInbox.dummyOwner?.mobile || selectedInbox.owner?.dummyOwner?.mobile || '';
+                        const mobile = resolveMobile(selectedInbox, null) || '';
                         // Always open template modal directly for WhatsApp
                         setModal({ type: 'whatsapp-compose-template', data: { mobile } });
                       }}
@@ -1460,7 +1472,7 @@ export default function InboxPage() {
           <div style={{ ...modalStyle, maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <WhatsAppEditor
               isReply={false}
-              recipientMobile={selectedInbox?.owner?.mobileno || selectedInbox?.owner?.mobile || selectedInbox?.owner?.dummyOwner?.mobile || selectedInbox?.dummyOwner?.mobile || ''}
+              recipientMobile={resolveMobile(selectedInbox, null) || ''}
               onSend={(data) => {
                 handleSendWhatsApp(data);
               }}
