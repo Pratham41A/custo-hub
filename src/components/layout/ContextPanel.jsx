@@ -15,7 +15,16 @@ const formatDate = (date) => {
 };
 
 export function ContextPanel({ inbox, onClose }) {
-  const { subscriptions, payments, views, notes, fetchUserSubscriptions, fetchUserPayments, fetchUserViews, fetchUserActivities } = useGlobalStore();
+  const subscriptions = useGlobalStore(state => state.subscriptions);
+  const payments = useGlobalStore(state => state.payments);
+  const views = useGlobalStore(state => state.views);
+  const notes = useGlobalStore(state => state.notes);
+  const fetchUserSubscriptions = useGlobalStore(state => state.fetchUserSubscriptions);
+  const fetchUserPayments = useGlobalStore(state => state.fetchUserPayments);
+  const fetchUserViews = useGlobalStore(state => state.fetchUserViews);
+  const fetchUserActivities = useGlobalStore(state => state.fetchUserActivities);
+  const resolutionsByInbox = useGlobalStore(state => state.resolutionsByInbox);
+  const fetchResolutions = useGlobalStore(state => state.fetchResolutions);
   const [activeModal, setActiveModal] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
   const [pagination, setPagination] = useState({});
@@ -64,6 +73,11 @@ export function ContextPanel({ inbox, onClose }) {
       if (type === 'payment') result = await fetchUserPayments(userId, 20);
       if (type === 'view') result = await fetchUserViews(userId, 20);
       if (type === 'notes') result = await fetchUserActivities(inboxId, 20);
+      if (type === 'resolutions') {
+        const cached = resolutionsByInbox?.[inboxId];
+        const list = (cached && Array.isArray(cached)) ? cached : await fetchResolutions(inboxId);
+        result = { data: list, pagination: null };
+      }
       if (result?.pagination) setPagination(result.pagination);
     } finally {
       setLoadingData(false);
@@ -80,6 +94,7 @@ export function ContextPanel({ inbox, onClose }) {
     { key: 'payment', label: 'Payments' },
     { key: 'view', label: 'Views' },
     { key: 'notes', label: 'Notes' },
+    { key: 'resolutions', label: 'Resolutions' },
   ];
 
   // Styles
@@ -155,7 +170,7 @@ export function ContextPanel({ inbox, onClose }) {
     background: '#fff',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    fontSize: '14px',
+    fontSize: '12px',
     fontWeight: 500,
   };
 
@@ -164,7 +179,7 @@ export function ContextPanel({ inbox, onClose }) {
     borderRadius: '6px',
     background: '#6366f1',
     color: '#fff',
-    fontSize: '12px',
+    fontSize: '10px',
     fontWeight: 600,
   };
 
@@ -191,7 +206,7 @@ export function ContextPanel({ inbox, onClose }) {
   const modalHeaderStyle = {
     padding: '20px 24px',
     borderBottom: '1px solid rgba(0,0,0,0.08)',
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
@@ -207,7 +222,7 @@ export function ContextPanel({ inbox, onClose }) {
   const thStyle = {
     padding: '12px 16px',
     textAlign: 'left',
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
@@ -220,7 +235,7 @@ export function ContextPanel({ inbox, onClose }) {
 
   const tdStyle = {
     padding: '14px 16px',
-    fontSize: '14px',
+    fontSize: '12px',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
     whiteSpace: 'normal',
     wordBreak: 'break-word',
@@ -239,8 +254,8 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <div style={avatarStyle}>{initials}</div>
-            <div style={{ fontSize: '18px', fontWeight: 600 }}>{getDisplayName()}</div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            <div style={{ fontSize: '16px', fontWeight: 600 }}>{getDisplayName()}</div>
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
               {isOwner ? 'Owner' : 'Guest'}
             </div>
           </div>
@@ -252,7 +267,7 @@ export function ContextPanel({ inbox, onClose }) {
                   <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {field.label}
                   </div>
-                  <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '2px', wordBreak: 'break-word' }}>
+                  <div style={{ fontSize: '12px', color: '#1e293b', marginTop: '2px', wordBreak: 'break-word' }}>
                     {field.value}
                   </div>
                 </div>
@@ -452,6 +467,47 @@ export function ContextPanel({ inbox, onClose }) {
                     ))}
                     {(!Array.isArray(notes) || notes.length === 0) && (
                       <tr><td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No notes</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolutions Modal */}
+      {activeModal === 'resolutions' && (
+        <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
+          <div style={{ ...modalStyle, maxWidth: '1000px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <span>Resolutions - {getDisplayName()} ({Array.isArray(resolutionsByInbox?.[inboxId]) ? resolutionsByInbox[inboxId].length : 0})</span>
+              <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
+            </div>
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
+              {loadingData ? (
+                <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Query Type</th>
+                      <th style={thStyle}>Resolved By</th>
+                      <th style={thStyle}>Source</th>
+                      <th style={thStyle}>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Array.isArray(resolutionsByInbox?.[inboxId]) ? resolutionsByInbox[inboxId] : []).map((r) => (
+                      <tr key={r._id}>
+                        <td style={tdStyle}>{r.queryType || '-'}</td>
+                        <td style={tdStyle}>{r.resolvedBy || '-'}</td>
+                        <td style={tdStyle}>{r.source || '-'}</td>
+                        <td style={tdStyle}>{formatDate(r.createdAt)}</td>
+                      </tr>
+                    ))}
+                    {(!(Array.isArray(resolutionsByInbox?.[inboxId]) && resolutionsByInbox[inboxId].length > 0)) && (
+                      <tr><td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No resolutions</td></tr>
                     )}
                   </tbody>
                 </table>

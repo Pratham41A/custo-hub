@@ -50,7 +50,7 @@ export function Sidebar() {
     padding: '8px 12px',
     display: 'block',
     color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: '10px',
+    fontSize: '9px',
     fontWeight: 600,
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
@@ -67,7 +67,7 @@ export function Sidebar() {
     background: isActive ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
     color: isActive ? '#fff' : 'rgba(255, 255, 255, 0.7)',
     fontWeight: isActive ? 600 : 500,
-    fontSize: '14px',
+    fontSize: '13px',
     transition: 'all 0.2s',
     textDecoration: 'none',
   });

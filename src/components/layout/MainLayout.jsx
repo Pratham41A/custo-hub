@@ -1,4 +1,5 @@
 import { Sidebar } from './Sidebar';
+import Toast from '../Toast';
 
 const styles = {
   container: {
@@ -21,6 +22,7 @@ export function MainLayout({ children }) {
       <main style={styles.main}>
         {children}
       </main>
+      <Toast />
     </div>
   );
 }

@@ -19,11 +19,20 @@ class ApiService {
     try {
       console.log(`🌐 API Request: ${config.method} ${url}`, config.body ? JSON.parse(config.body) : '');
       const response = await fetch(url, config);
-      const data = await response.json();
-      
+      // Read raw text first to support non-JSON responses (e.g., plain 'OK' or empty body)
+      const text = await response.text();
+      let data = text;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        // not JSON — leave as text
+        data = text;
+      }
+
       if (!response.ok) {
         console.error(`❌ API Error [${endpoint}]: Status ${response.status}`, data);
-        throw new Error(`API Error: ${response.status} - ${data?.message || data?.error || 'Unknown error'}`);
+        const message = (data && typeof data === 'object' && (data.message || data.error)) ? (data.message || data.error) : String(data || 'Unknown error');
+        throw new Error(`API Error: ${response.status} - ${message}`);
       }
       console.log(`✅ API Success [${endpoint}]:`, data);
       return data;
@@ -46,11 +55,16 @@ class ApiService {
     });
   }
 
-  // Update Inbox - PATCH /inbox/:inboxId
-  async updateInbox({ inboxId, status, queryType = '' }) {
+  // Update Inbox / Message - PATCH /inbox/:inboxId
+  // Accepts optional `messageId` when updating a specific message's status
+  async updateInbox({ inboxId, messageId, status, queryType = '', resolvedBy = '' }) {
+    const body = { status };
+    if (queryType) body.queryType = queryType;
+    if (messageId) body.messageId = messageId;
+    if (resolvedBy) body.resolvedBy = resolvedBy;
     return this.request(`/inbox/${inboxId}`, {
       method: 'PATCH',
-      body: { inboxId, status, queryType },
+      body,
     });
   }
 
@@ -143,6 +157,11 @@ class ApiService {
   // WhatsApp Templates - GET /whatsapp/templates
   async fetchWhatsappTemplates() {
     return this.request('/whatsapp/templates');
+  }
+
+  // Resolutions - GET /resolutions/:inboxId
+  async fetchResolutions(inboxId) {
+    return this.request(`/resolutions/${inboxId}`);
   }
 
   // Send WhatsApp Template - POST /whatsapp/template

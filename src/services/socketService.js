@@ -78,17 +78,19 @@ class SocketService {
     this.initAudioContext();
 
     this.socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['websockets'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
     });
 
-    this.socket.on('connect', () => {
+    this.socket.on('connection', () => {
+      alert('Connected')
       this.isConnected = true;
     });
 
-    this.socket.on('disconnect', (reason) => {
+    this.socket.on('disconnection', (reason) => {
+      alert('Disconnection')
       this.isConnected = false;
     });
 

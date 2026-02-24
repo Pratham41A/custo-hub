@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGlobalStore } from '../store/globalStore';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ContextPanel } from '../components/layout/ContextPanel';
@@ -6,7 +6,7 @@ import { EmailEditor } from '../components/EmailEditor';
 import { OutlookEditor } from '../components/OutlookEditor';
 import { WhatsAppEditor } from '../components/WhatsAppEditor';
 import { WhatsAppTemplateSelector } from '../components/WhatsAppTemplateSelector';
-import { MessageBubble } from '../components/MessageBubble';
+import MessageBubble from '../components/MessageBubble';
 
 const formatDate = (date) => {
   if (!date) return '';
@@ -48,17 +48,35 @@ export default function InboxPage() {
     return currentUTC > templateUTC;
   };
 
-  const {
-    inboxes, messages, selectedInbox, setSelectedInbox, setInboxes, updateInboxStatus,
-    activeFilter, setActiveFilter, loading, fetchInboxes, fetchMessages,
-    sendWhatsappTemplate, sendWhatsappMessage, sendEmailReply, sendNewEmail, createNote,
-    queryTypes, fetchQueryTypes, sendWhatsappTemplateWithParams,
-  } = useGlobalStore();
+  const inboxes = useGlobalStore(state => state.inboxes);
+  const allInboxes = useGlobalStore(state => state.allInboxes);
+  const messages = useGlobalStore(state => state.messages);
+  const selectedInbox = useGlobalStore(state => state.selectedInbox);
+  const setSelectedInbox = useGlobalStore(state => state.setSelectedInbox);
+  const setInboxes = useGlobalStore(state => state.setInboxes);
+  const updateInboxStatus = useGlobalStore(state => state.updateInboxStatus);
+  const activeFilter = useGlobalStore(state => state.activeFilter);
+  const setActiveFilter = useGlobalStore(state => state.setActiveFilter);
+  const loading = useGlobalStore(state => state.loading);
+  const fetchInboxes = useGlobalStore(state => state.fetchInboxes);
+  const getFilteredInboxes = useGlobalStore(state => state.getFilteredInboxes);
+  const ensureAllInboxesLoaded = useGlobalStore(state => state.ensureAllInboxesLoaded);
+  const fetchMessages = useGlobalStore(state => state.fetchMessages);
+  const sendWhatsappTemplate = useGlobalStore(state => state.sendWhatsappTemplate);
+  const sendWhatsappMessage = useGlobalStore(state => state.sendWhatsappMessage);
+  const sendEmailReply = useGlobalStore(state => state.sendEmailReply);
+  const sendNewEmail = useGlobalStore(state => state.sendNewEmail);
+  const createNote = useGlobalStore(state => state.createNote);
+  const queryTypes = useGlobalStore(state => state.queryTypes);
+  const fetchQueryTypes = useGlobalStore(state => state.fetchQueryTypes);
+  const sendWhatsappTemplateWithParams = useGlobalStore(state => state.sendWhatsappTemplateWithParams);
+  const updateMessage = useGlobalStore(state => state.updateMessage);
 
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [modal, setModal] = useState({ type: null, data: {} });
   const [search, setSearch] = useState('');
-  const [toast, setToast] = useState({ text: '', type: '' });
+  const toast = useGlobalStore(state => state.toast);
+  const showToast = useGlobalStore(state => state.showToast);
   const [sending, setSending] = useState(false);
   const [replyingToId, setReplyingToId] = useState(null);
   const [replyForm, setReplyForm] = useState({ body: '', template: '' });
@@ -73,7 +91,23 @@ export default function InboxPage() {
     setSelectedInbox(null);
     setShowContextPanel(false);
   }, [activeFilter]);
-  useEffect(() => { fetchQueryTypes(); }, [fetchQueryTypes]);
+
+  // Load all inboxes on mount for local filtering
+  useEffect(() => {
+    const initializeInboxes = async () => {
+      try {
+        // Ensure all inboxes are loaded and cached
+        if (!Array.isArray(allInboxes) || allInboxes.length === 0) {
+          await ensureAllInboxesLoaded();
+        }
+      } catch (error) {
+        console.error('Failed to initialize inboxes:', error);
+      }
+    };
+    initializeInboxes();
+  }, []);
+
+  useEffect(() => { fetchQueryTypes(); }, []);
 
   // Helper: resolve and format mobile number with country code from multiple possible locations
   // Returns concatenated countrycode + mobileno (e.g., "+919920292920" or "919920292920")
@@ -138,7 +172,7 @@ export default function InboxPage() {
 
         // Listen for new messages
         socketService.socket.on('message', (messageData) => {
-          console.log('New message received via socket:', messageData);
+          alert('New message received via socket:', messageData);
           if (messageData && messageData._id) {
             // Extract inbox ID from message
             const mInboxId = typeof messageData.inbox === 'object' 
@@ -197,16 +231,15 @@ export default function InboxPage() {
 
   const loadInboxes = async () => {
     try {
-      await fetchInboxes({ status: activeFilter === 'all' ? '' : activeFilter });
+      // Use local filtering from the cached allInboxes
+      const filtered = getFilteredInboxes();
+      setInboxes(filtered);
     } catch {
       showToast('Failed to load inboxes', 'error');
     }
   };
 
-  const showToast = (text, type) => {
-    setToast({ text, type });
-    setTimeout(() => setToast({ text: '', type: '' }), 3000);
-  };
+  // Using global `showToast` from store
 
   const closeModal = () => setModal({ type: null, data: {} });
 
@@ -311,8 +344,8 @@ export default function InboxPage() {
 
   const filteredInboxes = inboxesArray
     .filter((i) => {
-      // When 'all' is selected, only show the allowed statuses in the defined order
-      if (activeFilter === 'all') return allowedStatuses.includes(i.status);
+      // When 'all' is selected, show all inboxes regardless of status
+      if (activeFilter === 'all') return true;
       // When a specific status is selected, show only that status
       return i.status === activeFilter;
     })
@@ -385,9 +418,23 @@ export default function InboxPage() {
       return timeA - timeB; // Oldest first (ascending) - latest at bottom
     });
 
+  const prevMessagesLenRef = React.useRef(inboxMessages.length);
+  const prevInboxIdRef = React.useRef(selectedInbox?._id);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [inboxMessages]);
+    const prevLen = prevMessagesLenRef.current;
+    const prevInboxId = prevInboxIdRef.current;
+    const currentLen = inboxMessages.length;
+    const currentInboxId = selectedInbox?._id;
+
+    // Scroll only when switching inbox or when new messages are appended
+    if (prevInboxId !== currentInboxId || currentLen > prevLen) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    prevMessagesLenRef.current = currentLen;
+    prevInboxIdRef.current = currentInboxId;
+  }, [inboxMessages, selectedInbox]);
 
   const handleInboxClick = async (inbox) => {
     // Toggle selection: if clicking same inbox, deselect and hide panel
@@ -401,21 +448,8 @@ export default function InboxPage() {
     setSelectedInbox(inbox);
     setShowContextPanel(false);
     try {
-      const msgData = await fetchMessages(inbox._id);
-      
-      // Mark as read if unread - use API response data
-      if (inbox.status === 'unread') {
-        // Call API and get updated inbox data from response
-        const updatedInboxData = await updateInboxStatus(inbox._id, 'read');
-        
-        // Update state with all fields returned from API
-        const updatedInboxes = inboxes.map(i =>
-          i._id === inbox._id ? { ...i, ...updatedInboxData } : i
-        );
-        setInboxes(updatedInboxes);
-        
-        showToast('Marked as read', 'info');
-      }
+      await fetchMessages(inbox._id);
+      // Do NOT call updateInboxStatus here - user requested no status-changing API calls when opening inbox
     } catch (error) {
       showToast('Failed to load messages', 'error');
     }
@@ -424,12 +458,25 @@ export default function InboxPage() {
   
   const handleResolve = async () => {
     const queryType = modal.data.customQuery || modal.data.queryType;
+    const resolvedBy = modal.data.resolvedBy || '';
     if (!selectedInbox || !queryType) return;
     try {
-      await updateInboxStatus(selectedInbox._id, 'resolved', queryType);
+      await updateInboxStatus(selectedInbox._id, 'resolved', queryType, resolvedBy);
       showToast(`Resolved - ${queryType}`, 'success');
       closeModal();
     } catch { showToast('Failed to resolve', 'error'); }
+  };
+
+  const handleResolveMessage = async () => {
+    const queryType = modal.data.customQuery || modal.data.queryType;
+    const resolvedBy = modal.data.resolvedBy || '';
+    const messageId = modal.data.messageId;
+    if (!selectedInbox || !queryType || !messageId) return;
+    try {
+      await updateMessage(selectedInbox._id, messageId, 'resolved', queryType, resolvedBy);
+      showToast(`Resolved - ${queryType}`, 'success');
+      closeModal();
+    } catch (e) { console.error(e); showToast('Failed to resolve message', 'error'); }
   };
 
   const handleSendEmail = async (data = null) => {
@@ -441,12 +488,10 @@ export default function InboxPage() {
     setSending(true);
     try {
       await sendNewEmail(sendData.email, sendData.subject || '', sendData.htmlBody);
-      showToast('Email sent', 'success');
       closeModal();
       // Let socket.io 'message' event handle state updates
     } catch (error) {
       console.error('Email send error:', error);
-      showToast('Failed to send email', 'error');
     }
     finally { setSending(false); }
   };
@@ -476,11 +521,9 @@ export default function InboxPage() {
         // Direct message send
         await sendWhatsappMessage(sendData.mobile, sendData.body);
       }
-      showToast('WhatsApp sent', 'success');
       // Let socket.io 'message' event handle state updates
     } catch (error) {
       console.error('WhatsApp send error:', error);
-      showToast('Failed to send message', 'error');
     }
     finally { setSending(false); }
   };
@@ -639,7 +682,7 @@ export default function InboxPage() {
   const isStarted = selectedInbox && ['pending'].includes(selectedInbox.status);
 
   const getStatusColor = (status) => {
-    const colors = { unread: '#f59e0b', read: '#3b82f6', resolved: '#10b981', pending: '#ef4444' };
+    const colors = { unread: '#f5360b', read: '#3b82f6', resolved: '#10b981' };
     return colors[status] || '#64748b';
   };
 
@@ -647,23 +690,23 @@ export default function InboxPage() {
   const containerStyle = { display: 'flex', height: '100vh', marginRight: showContextPanel ? '340px' : 0, transition: 'margin-right 0.3s' };
   const listPanelStyle = { width: '360px', borderRight: '1px solid rgba(0,0,0,0.08)', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px -12px rgba(0,0,0,0.1)' };
   const listHeaderStyle = { padding: '24px', borderBottom: '1px solid rgba(0,0,0,0.08)' };
-  const filterBtnStyle = (active) => ({ padding: '6px 12px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', border: 'none', background: active ? '#6366f1' : 'rgba(0,0,0,0.04)', color: active ? '#fff' : '#374151', cursor: 'pointer', transition: 'all 0.2s' });
-  const inboxItemStyle = (isSelected, status) => ({ padding: '16px', marginBottom: '8px', borderRadius: '12px', cursor: 'pointer', border: isSelected ? '1px solid #6366f1' : '1px solid transparent', background: isSelected ? 'rgba(99, 102, 241, 0.06)' : status === 'unread' ? 'rgba(245, 158, 11, 0.04)' : '#fff', transition: 'all 0.2s' });
-  const avatarStyle = (color) => ({ width: '44px', height: '44px', borderRadius: '12px', background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '14px' });
-  const chipStyle = (color) => ({ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: `${color}15`, color, textTransform: 'capitalize' });
+  const filterBtnStyle = (active) => ({ padding: '6px 12px', fontSize: '11px', fontWeight: 600, borderRadius: '8px', border: 'none', background: active ? '#6366f1' : 'rgba(0,0,0,0.04)', color: active ? '#fff' : '#374151', cursor: 'pointer', transition: 'all 0.2s' });
+  const inboxItemStyle = (isSelected, status) => ({ display: 'flex', gap: '12px', padding: '12px 16px', marginBottom: '4px', borderRadius: '12px', cursor: 'pointer', border: isSelected ? '1px solid #6366f1' : '1px solid transparent', background: isSelected ? 'rgba(99, 102, 241, 0.06)' : status === 'unread' ? 'rgba(245, 158, 11, 0.04)' : '#fff', transition: 'all 0.2s', alignItems: 'flex-start' });
+  const avatarStyle = (color) => ({ width: '40px', height: '40px', borderRadius: '10px', background: `${color}`, color:'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '12px', flexShrink: 0 });
+  const chipStyle = (color) => ({ padding: '4px 10px', borderRadius: '6px', fontSize: '10px', fontWeight: 600, background: `${color}15`, color, textTransform: 'capitalize' });
   const messagePanelStyle = { flex: 1, display: 'flex', flexDirection: 'column', background: '#fafbfc' };
   const threadHeaderStyle = { minHeight: '72px', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
-  const buttonStyle = (bg, color) => ({ display: 'inline-flex', alignItems: 'center', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, border: bg === 'transparent' ? '1px solid rgba(0,0,0,0.15)' : 'none', background: bg, color, cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' });
+  const buttonStyle = (bg, color) => ({ display: 'inline-flex', alignItems: 'center', padding: '8px 20px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: bg === 'transparent' ? '1px solid rgba(0,0,0,0.15)' : 'none', background: bg, color, cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' });
   const messageStyle = (isOutgoing) => ({ maxWidth: '70%', marginBottom: '16px', marginLeft: isOutgoing ? 'auto' : 0, padding: '16px', borderRadius: '16px', background: isOutgoing ? '#6366f1' : '#fff', color: isOutgoing ? '#fff' : '#0f172a', boxShadow: isOutgoing ? '0 4px 12px rgba(99, 102, 241, 0.3)' : '0 2px 8px rgba(0,0,0,0.08)' });
   const modalOverlayStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 };
   const modalStyle = { background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', overflow: 'hidden' };
-  const modalHeaderStyle = { padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.08)', fontSize: '18px', fontWeight: 600 };
+  const modalHeaderStyle = { padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.08)', fontSize: '16px', fontWeight: 600 };
   const modalBodyStyle = { padding: '24px' };
   const modalFooterStyle = { padding: '16px 24px', borderTop: '1px solid rgba(0,0,0,0.08)', display: 'flex', justifyContent: 'flex-end', gap: '12px' };
-  const inputStyle = { width: '100%', padding: '12px 16px', border: '1px solid rgba(0,0,0,0.12)', borderRadius: '10px', fontSize: '14px', marginBottom: '16px' };
+  const inputStyle = { width: '100%', padding: '12px 16px', border: '1px solid rgba(0,0,0,0.12)', borderRadius: '10px', fontSize: '12px', marginBottom: '16px' };
   const textareaStyle = { ...inputStyle, minHeight: '120px', resize: 'vertical' };
   const selectStyle = { ...inputStyle, cursor: 'pointer' };
-  const toastStyle = { position: 'fixed', bottom: '24px', right: '24px', padding: '12px 20px', borderRadius: '10px', fontSize: '14px', fontWeight: 500, color: '#fff', background: toast.type === 'error' ? '#ef4444' : toast.type === 'success' ? '#10b981' : '#3b82f6', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', zIndex: 10000, animation: 'fadeIn 0.3s' };
+  const toastStyle = { position: 'fixed', bottom: '24px', right: '24px', padding: '12px 20px', borderRadius: '10px', fontSize: '12px', fontWeight: 500, color: '#fff', background: toast.type === 'error' ? '#ef4444' : toast.type === 'success' ? '#10b981' : '#3b82f6', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', zIndex: 10000, animation: 'fadeIn 0.3s' };
 
   return (
     <MainLayout>
@@ -691,16 +734,14 @@ export default function InboxPage() {
                   color: '#fff',
                   border: 'none',
                   cursor: 'pointer',
-                  fontSize: '20px',
+                  fontSize: '18px',
                   fontWeight: 700,
                   transition: 'all 0.2s',
                 }}
                 onClick={() => setModal({ type: 'compose-options', data: {} })}
-                onMouseEnter={(e) => e.target.style.background = '#4f46e5'}
-                onMouseLeave={(e) => e.target.style.background = '#6366f1'}
                 title="Compose new message"
               >
-                <img src="https://api.iconify.design/fluent:compose-48-regular.svg" alt="compose" style={{ width: '20px', height: '20px', filter: 'invert(1)' }} />
+                <img src="https://api.iconify.design/fluent:compose-48-regular.svg?color=white" alt="compose" style={{ width: '20px', height: '20px' }} />
               </button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -731,20 +772,17 @@ export default function InboxPage() {
                     key={inbox._id} 
                     onClick={() => handleInboxClick(inbox)}
                     style={{
-                      padding: '14px 16px',
+                      padding: '5px 5px',
                       marginBottom: '10px',
                       borderRadius: '12px',
-                      background: isSelected ? 'rgba(99, 102, 241, 0.08)' : inbox.status === 'unread' ? '#fef9e7' : '#fff',
-                      border: isSelected ? '2px solid #6366f1' : inbox.status === 'unread' ? '1px solid #fcd34d' : '1px solid #e2e8f0',
+                      background: isSelected ? '#d39d2e' :  '#fff',
+                      border:  '1px solid #e2e8f0',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      boxShadow: isSelected ? '0 4px 12px rgba(99, 102, 241, 0.15)' : inbox.status === 'unread' ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
                       display: 'flex',
-                      gap: '14px',
+                      gap: '8px',
                       alignItems: 'flex-start'
                     }}
-                    onMouseEnter={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.status === 'unread' ? '0 4px 12px rgba(252, 211, 77, 0.3)' : '0 2px 8px rgba(0,0,0,0.1)')}
-                    onMouseLeave={(e) => !isSelected && (e.currentTarget.style.boxShadow = inbox.status === 'unread' ? '0 2px 8px rgba(252, 211, 77, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)')}
                   >
                     {/* Avatar with Channel Icon */}
                     <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -769,19 +807,19 @@ export default function InboxPage() {
                         ) : inbox.source === 'email' ? (
                           <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Email.png" alt="Email" style={{ width: '14px', height: '14px', objectFit: 'contain' }} />
                         ) : (
-                          <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 'bold' }}></span>
+                          <span style={{ fontSize: '11px', color: '#cbd5e1', fontWeight: 'bold' }}></span>
                         )}
                       </div>
                     </div>
 
                     {/* Card Content */}
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       {/* Top Row: Name and Status */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                         <span 
                           style={{
                             fontWeight: inbox.status === 'unread' ? 700 : 600,
-                            fontSize: '13px',
+                            fontSize: '12px',
                             color: '#0f172a',
                             minWidth: 0,
                             overflow: 'hidden',
@@ -797,7 +835,6 @@ export default function InboxPage() {
                             borderRadius: '6px',
                             fontSize: '11px',
                             fontWeight: 600,
-                            background: `${statusColor}15`,
                             color: statusColor,
                             textTransform: 'capitalize',
                             flexShrink: 0,
@@ -811,8 +848,8 @@ export default function InboxPage() {
                       {/* Middle Row: Preview */}
                       <div 
                         style={{
-                          fontSize: '12px',
-                          color: inbox.status === 'unread' ? '#7c2d12' : '#64748b',
+                          fontSize: '11px',
+                          color: '#0f172a',
                           fontWeight: inbox.status === 'unread' ? 500 : 400,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -840,36 +877,11 @@ export default function InboxPage() {
 
                       {/* Bottom Row: DateTime and updatedAt */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontSize: '12px', color: '#94a3b8' }}>{formatDate(inbox.inboxDateTime)}</div>
-                        <div style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '8px' }}>{inbox.updatedAt ? formatDate(inbox.updatedAt) : ''}</div>
+                        <div></div>
+                        <div style={{ fontSize: '10px', color: isSelected?'white':'#525b67', marginLeft: '4px' }}>{inbox.updatedAt ? formatDate(inbox.updatedAt) : ''}</div>
                       </div>
                     </div>
 
-                    {/* Status Indicator */}
-                    {inbox.status === 'unread' && (
-                      <div 
-                        style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          background: '#f59e0b',
-                          flexShrink: 0,
-                          marginTop: '6px'
-                        }}
-                      />
-                    )}
-                    {inbox.status === 'resolved' && (
-                      <div 
-                        style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          background: '#10b981',
-                          flexShrink: 0,
-                          marginTop: '6px'
-                        }}
-                      />
-                    )}
                   </div>
                 );
               })
@@ -887,8 +899,8 @@ export default function InboxPage() {
                     {(getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2)}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '15px' }}>{getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'Unknown User'}</div>
-                    <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{getUser(selectedInbox).fullname || getUser(selectedInbox).name || 'Unknown User'}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       <div>{selectedInbox?.owner?.email || selectedInbox?.dummyOwner?.email || ''}</div>
                       <div style={{ opacity: 0.9 }}>{selectedInbox?.updatedAt ? formatDate(selectedInbox.updatedAt) : (selectedInbox?.inboxDateTime ? formatDate(selectedInbox.inboxDateTime) : '')}</div>
                     </div>
@@ -898,7 +910,7 @@ export default function InboxPage() {
 
                   {/* Display queryType before Mark Unread */}
                   {selectedInbox?.queryType && (
-                    <div style={{ fontSize: '12px', color: '#7c2d12', fontWeight: 500, padding: '4px 8px', background: '#fef08a', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '11px', color: '#7c2d12', fontWeight: 500, padding: '4px 8px', background: '#fef08a', borderRadius: '4px' }}>
                       {selectedInbox.queryType}
                     </div>
                   )}
@@ -956,6 +968,9 @@ export default function InboxPage() {
                           isStarted={isStarted}
                           onReply={(messageId) => setReplyingToId(replyingToId === messageId ? null : messageId)}
                           onScrollToMessage={handleScrollToMessage}
+                          onUpdateMessage={updateMessage}
+                          onRequestResolveMessage={(message) => setModal({ type: 'resolve-message', data: { messageId: message._id } })}
+                          inboxId={selectedInbox?._id}
                         />
                       </div>
                     ))}
@@ -965,7 +980,6 @@ export default function InboxPage() {
               </div>
 
               <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', padding: '16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Inline Reply Form - Shows when reply button is clicked */}
                   {replyingToId && (
                     <div style={{ 
                       borderRadius: '12px', 
@@ -974,7 +988,7 @@ export default function InboxPage() {
                       background: 'rgba(99, 102, 241, 0.04)', 
                       overflow: 'auto' 
                     }}>
-                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: '#6366f1' }}>⤴ Reply</div>
                     
                     {/* Get the message being replied to */}
                     {inboxMessages.find(m => m._id === replyingToId)?.source === 'whatsapp' ? (
@@ -1117,7 +1131,7 @@ export default function InboxPage() {
                         gap: '6px',
                         padding: '8px 12px',
                         borderRadius: '8px',
-                        fontSize: '12px',
+                        fontSize: '11px',
                         fontWeight: 600,
                         border: 'none',
                         color: '#000',
@@ -1139,7 +1153,7 @@ export default function InboxPage() {
                         gap: '6px',
                         padding: '8px 12px',
                         borderRadius: '8px',
-                        fontSize: '12px',
+                        fontSize: '11px',
                         fontWeight: 600,
                         border: 'none',
                         color: '#000',
@@ -1165,10 +1179,10 @@ export default function InboxPage() {
                       padding: '16px', 
                       background: 'rgba(59, 130, 246, 0.04)' 
                     }}>
-                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: '#3b82f6' }}>Email</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: '#3b82f6' }}>Email</div>
                       
                       <div style={{ }}>
-                        <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
+                        <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
                         <input
                           type="email"
                           style={{...inputStyle, backgroundColor: (selectedInbox?.owner || selectedInbox?.dummyOwner) ? '#f5f5f5' : '#fff'}}
@@ -1180,7 +1194,7 @@ export default function InboxPage() {
                       </div>
                       
                       <div style={{  }}>
-                        <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>Subject</label>
+                        <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>Subject</label>
                         <input
                           type="text"
                           style={inputStyle}
@@ -1241,11 +1255,7 @@ export default function InboxPage() {
       {modal.type === 'compose-options' && (
         <div style={modalOverlayStyle} onClick={closeModal}>
           <div style={{ ...modalStyle, maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeaderStyle}>Compose Message</div>
             <div style={modalBodyStyle}>
-              <p style={{ marginBottom: '16px', color: '#64748b', fontSize: '14px' }}>
-                Select how you would like to contact:
-              </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <button
                   style={{
@@ -1257,7 +1267,7 @@ export default function InboxPage() {
                     borderRadius: '10px',
                     background: '#fff',
                     cursor: 'pointer',
-                    fontSize: '14px',
+                    fontSize: '12px',
                     fontWeight: 600,
                     color: '#0f172a',
                     transition: 'all 0.2s',
@@ -1279,7 +1289,7 @@ export default function InboxPage() {
                     alt="email" 
                     style={{ width: '24px', height: '24px' }} 
                   />
-                  <span>Send Email</span>
+                  <span>New Email</span>
                 </button>
                 <button
                   style={{
@@ -1291,7 +1301,7 @@ export default function InboxPage() {
                     borderRadius: '10px',
                     background: '#fff',
                     cursor: 'pointer',
-                    fontSize: '14px',
+                    fontSize: '12px',
                     fontWeight: 600,
                     color: '#0f172a',
                     transition: 'all 0.2s',
@@ -1313,7 +1323,7 @@ export default function InboxPage() {
                     alt="whatsapp" 
                     style={{ width: '24px', height: '24px' }} 
                   />
-                  <span>Send WhatsApp</span>
+                  <span>New WhatsApp</span>
                 </button>
               </div>
             </div>
@@ -1376,9 +1386,9 @@ export default function InboxPage() {
             <div style={modalBodyStyle}>
               {/* Note Body */}
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '8px', display: 'block' }}>Note</label>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '8px', display: 'block' }}>Note</label>
                 <textarea 
-                  style={{ ...textareaStyle, borderColor: '#cbd5e1', borderWidth: '1.5px', fontFamily: 'inherit', fontSize: '14px' }} 
+                  style={{ ...textareaStyle, borderColor: '#cbd5e1', borderWidth: '1.5px', fontFamily: 'inherit', fontSize: '12px' }} 
                   value={modal.data.noteBody || ''} 
                   onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteBody: e.target.value } })} 
                 />
@@ -1386,11 +1396,11 @@ export default function InboxPage() {
 
               {/* Due Date DateTime Picker */}
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '8px', display: 'block' }}>Due Date </label>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '8px', display: 'block' }}>Due Date </label>
                 <div style={{ position: 'relative', borderRadius: '10px', border: '1.5px solid #cbd5e1', overflow: 'hidden', background: '#fff', transition: 'all 0.2s ease' }}>
                   <input 
                     type="datetime-local" 
-                    style={{ width: '100%', padding: '12px 14px', border: 'none', fontSize: '14px', outline: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }} 
+                    style={{ width: '100%', padding: '12px 14px', border: 'none', fontSize: '12px', outline: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }} 
                     value={modal.data.noteDueDate || ''} 
                     onChange={(e) => setModal({ ...modal, data: { ...modal.data, noteDueDate: e.target.value } })} 
                   />
@@ -1422,31 +1432,84 @@ export default function InboxPage() {
               {queryTypes.length > 0 ? (
                 <>
                   <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Select Query Type</div>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Select Query Type</div>
                     <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
                       <option value="">Select Query Type</option>
-                      {queryTypes.map((qt) => (
-                        <option key={qt._id || qt.name || qt} value={qt.name || qt}>
-                          {qt.name || qt}
-                        </option>
-                      ))}
+                      {queryTypes.map((qt) => {
+                        const val = (typeof qt === 'string') ? qt : (qt?.name ?? qt?.value ?? qt?._id ?? JSON.stringify(qt));
+                        const label = (typeof qt === 'string') ? qt : (qt?.name ?? String(val));
+                        return (
+                          <option key={val} value={val}>
+                            {label}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   <div>
-                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Or Enter Custom Query Type</div>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Or Enter Custom Query Type</div>
                     <input type="text" style={inputStyle} placeholder="Custom query type (optional)" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
                   </div>
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Enter Query Type</div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Enter Query Type</div>
                   <input type="text" style={inputStyle} placeholder="Enter query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
                 </>
               )}
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Resolved By</div>
+                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} />
+              </div>
             </div>
             <div style={modalFooterStyle}>
               <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
               <button style={buttonStyle('#10b981', '#fff')} onClick={handleResolve}>Resolve</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal.type === 'resolve-message' && (
+        <div style={modalOverlayStyle} onClick={closeModal}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>Resolve Message</div>
+            <div style={modalBodyStyle}>
+              {queryTypes.length > 0 ? (
+                <>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Select Query Type</div>
+                    <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
+                      <option value="">Select Query Type</option>
+                      {queryTypes.map((qt) => {
+                        const val = (typeof qt === 'string') ? qt : (qt?.name ?? qt?.value ?? qt?._id ?? JSON.stringify(qt));
+                        const label = (typeof qt === 'string') ? qt : (qt?.name ?? String(val));
+                        return (
+                          <option key={val} value={val}>{label}</option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Or Enter Custom Query Type</div>
+                    <input type="text" style={inputStyle} placeholder="Custom query type (optional)" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Enter Query Type</div>
+                  <input type="text" style={inputStyle} placeholder="Enter query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                </>
+              )}
+
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Resolved By</div>
+                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} />
+              </div>
+            </div>
+            <div style={modalFooterStyle}>
+              <button style={buttonStyle('transparent', '#374151')} onClick={closeModal}>Cancel</button>
+              <button style={buttonStyle('#10b981', '#fff')} onClick={handleResolveMessage}>Resolve</button>
             </div>
           </div>
         </div>
@@ -1521,7 +1584,7 @@ export default function InboxPage() {
         </div>
       )}
 
-      {toast.text && <div style={toastStyle}>{toast.text}</div>}
+      {/* Toasts are now rendered globally in MainLayout */}
     </MainLayout>
   );
 }

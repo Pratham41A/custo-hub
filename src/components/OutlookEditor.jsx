@@ -98,7 +98,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
     <div style={containerStyle}>
       <div style={headerStyle}>
         <h3 style={titleStyle}>
-          {isReply ? 'Reply to Email' : 'Send Email'}
+          {isReply ? 'Reply Email' : 'New Email'}
         </h3>
       </div>
 
@@ -107,7 +107,6 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
         <label style={labelStyle}>Email Address</label>
         <input
           type="email"
-          placeholder="recipient@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           style={inputStyle}
@@ -120,7 +119,6 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
           <label style={labelStyle}>Subject</label>
           <input
             type="text"
-            placeholder="Enter email subject"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             style={inputStyle}
@@ -130,11 +128,10 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
 
       {/* Body - Using Quill Editor */}
       <div style={{ marginBottom: '16px' }}>
-        <label style={labelStyle}>Message Body</label>
+        <label style={labelStyle}>Message</label>
         <EmailEditor
           value={htmlBody}
           onChange={setHtmlBody}
-          placeholder="Write your email message here..."
         />
       </div>
 
@@ -143,7 +140,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
           Cancel
         </button>
         <button style={sendButtonStyle} onClick={handleSend}>
-          Send Email
+          Send 
         </button>
       </div>
     </div>

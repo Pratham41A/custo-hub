@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 const formatDate = (date) => {
   if (!date) return '';
@@ -14,7 +14,8 @@ const formatDate = (date) => {
 };
 
 // HTML Sanitization & Fixing Function
-const sanitizeAndFixHTML = (htmlString) => {
+// Accepts optional `isSent` flag so we can scope styles for incoming vs sent messages
+const sanitizeAndFixHTML = (htmlString, isSent = false) => {
   if (!htmlString || typeof htmlString !== 'string') return htmlString;
   
   try {
@@ -43,10 +44,21 @@ const sanitizeAndFixHTML = (htmlString) => {
           const finalHref = a && a.getAttribute('href') ? a.getAttribute('href') : href;
           // Get cleaned inner HTML/text
           const display = tmp.textContent && tmp.textContent.trim() ? tmp.innerHTML : inner;
-          return `<a href="${finalHref}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:10px 16px;border-radius:4px;background:#ff9900;color:#ffffff;text-decoration:none;font-weight:700;">${display}</a>`;
+          return `<a href="${finalHref}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:7px 14px;border-radius:3px;background:#ff9900;color:#ffffff;text-decoration:none;font-weight:600;font-size:12px;">${display}</a>`;
         } catch (e) {
-          return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:10px 16px;border-radius:4px;background:#ff9900;color:#ffffff;text-decoration:none;font-weight:700;">${inner}</a>`;
+          return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:7px 14px;border-radius:3px;background:#ff9900;color:#ffffff;text-decoration:none;font-weight:600;font-size:12px;">${inner}</a>`;
         }
+      });
+
+      // 2b) Convert common VML image patterns (<v:imagedata> or inside <v:shape>) to <img>
+      html = html.replace(/<v:imagedata[^>]*src=["']([^"']+)["'][^>]*\/?\s*>/gi, (match, src) => {
+        return `<img src="${src}" alt="" />`;
+      });
+
+      html = html.replace(/<v:shape[\s\S]*?>([\s\S]*?)<\/v:shape>/gi, (match, inner) => {
+        const srcMatch = inner.match(/<v:imagedata[^>]*src=["']([^"']+)["']/i);
+        if (srcMatch) return `<img src="${srcMatch[1]}" alt="" />`;
+        return inner;
       });
 
       // 3) Convert common pattern where an <a> wraps a <button> (many mailers produce this)
@@ -56,7 +68,7 @@ const sanitizeAndFixHTML = (htmlString) => {
         const href = hrefMatch ? hrefMatch[1] : '#';
         const aStyleMatch = aAttrs.match(/style=["']([^"']*)["']/i);
         const btnStyleMatch = btnAttrs.match(/style=["']([^"']*)["']/i);
-        const defaultBtnStyle = 'display:inline-block;padding:0.6em 1.2em;background:#ff9900;color:#ffffff;border:none;border-radius:2px;text-decoration:none;font-weight:700;font-family:Lato,Calibri,Arial,sans-serif;font-size:1em;letter-spacing:1px;text-transform:uppercase;';
+        const defaultBtnStyle = 'display:inline-block;padding:7px 14px;background:#ff9900;color:#ffffff;border:none;border-radius:3px;text-decoration:none;font-weight:600;font-family:inherit;font-size:12px;';
         const combinedStyle = `${aStyleMatch ? aStyleMatch[1] + ';' : ''}${btnStyleMatch ? btnStyleMatch[1] + ';' : ''}${defaultBtnStyle}`;
         try {
           const tmp = document.createElement('div');
@@ -71,7 +83,7 @@ const sanitizeAndFixHTML = (htmlString) => {
       // 4) Convert standalone <button> tags to anchors (no href available)
       html = html.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi, (match, btnAttrs, inner) => {
         const btnStyleMatch = btnAttrs.match(/style=["']([^"']*)["']/i);
-        const defaultBtnStyle = 'display:inline-block;padding:0.6em 1.2em;background:#ff9900;color:#ffffff;border:none;border-radius:2px;text-decoration:none;font-weight:700;font-family:Lato,Calibri,Arial,sans-serif;font-size:1em;letter-spacing:1px;text-transform:uppercase;';
+        const defaultBtnStyle = 'display:inline-block;padding:7px 14px;background:#ff9900;color:#ffffff;border:none;border-radius:3px;text-decoration:none;font-weight:600;font-family:inherit;font-size:12px;';
         const combinedStyle = `${btnStyleMatch ? btnStyleMatch[1] + ';' : ''}${defaultBtnStyle}`;
         try {
           const tmp = document.createElement('div');
@@ -121,7 +133,87 @@ const sanitizeAndFixHTML = (htmlString) => {
     };
     
     sanitizeNode(temp);
-    return temp.innerHTML;
+    // Remove stray lone closing-brace lines that sometimes appear inside Outlook fragments
+    let inner = temp.innerHTML.replace(/^\s*\}\s*$/gm, '');
+    // Also remove isolated stray braces adjacent to tags
+    inner = inner.replace(/>\s*\}/g, '>').replace(/\}\s*</g, '<');
+
+    // Normalize table width attributes so legacy fixed-width email templates don't overflow
+    try {
+      inner = inner.replace(/<table\b([^>]*)\bwidth=(?:['"])?\d+[^>]*>/gi, (m) => m.replace(/width=(?:['"])?\d+[^>\s]*/i, 'width="100%"'));
+      // Remove style-based fixed pixel widths on tables
+      inner = inner.replace(/(<table\b[^>]*style=["'][^"']*)width:\s*\d+px;?([^"']*["'][^>]*>)/gi, (m, p1, p2) => `${p1}${p2}`);
+    } catch (e) {
+      // ignore if regex fails for some odd HTML
+    }
+    // Wrap sanitized content with a lightweight email-content scope and helpful CSS
+    const style = `
+      <style>
+        /* Basic reset and box sizing */
+        .email-content, .email-content * { box-sizing: border-box !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; }
+        .email-content { width:100% !important; max-width:100% !important; overflow-wrap:break-word !important; -webkit-font-smoothing:antialiased !important; }
+
+        /* Images and media */
+        .email-content img{max-width:100%!important;height:auto!important;display:block!important;margin:6px 0;border:0!important}
+        .email-content picture, .email-content video, .email-content iframe { max-width:100%!important; }
+
+        /* Tables: center and make responsive where possible */
+        .email-content table{max-width:100%!important;width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;margin:0 auto!important}
+        .email-content table[width]{width:100% !important}
+        .email-content td, .email-content th{word-break:break-word!important;vertical-align:top!important;padding:4px 8px!important}
+
+        /* Headings and paragraphs */
+        .email-content p, .email-content div, .email-content span { margin:0 0 8px!important; line-height:1.35!important }
+        .email-content h1, .email-content h2, .email-content h3, .email-content h4, .email-content h5, .email-content h6 { margin:0 0 8px!important; line-height:1.2!important }
+
+        /* Reset common Outlook/Mso classes */
+        .ExternalClass, .ExternalClass * { line-height:100% !important; }
+        .MsoNormal, .MsoNormal p { margin:0 !important }
+
+        /* Links/buttons normalization */
+        .email-content a{word-break:break-word!important;color:inherit!important;text-decoration:underline!important}
+        .email-content a, .email-content button, .email-content .btn, .email-content a[role=button] {
+          display: inline-block !important;
+          min-width: 90px !important;
+          max-width: 100% !important;
+          height: auto !important;
+          padding: 8px 14px !important;
+          line-height: 1 !important;
+          white-space: nowrap !important;
+          text-align: center !important;
+          font-weight: 600 !important;
+          font-size: 13px !important;
+          border-radius: 6px !important;
+          text-decoration: none !important;
+          overflow: hidden !important;
+          margin: 8px 0 !important;
+        }
+
+        /* Images inside buttons */
+        .email-content a img, .email-content button img, .email-content .btn img { max-height:28px!important;height:auto!important;width:auto!important;display:inline-block!important;margin-right:8px!important }
+
+        /* Incoming message specific button sizing: center and avoid wrapping; use inline-block rather than block to keep layout stable */
+        .email-content.incoming a, .email-content.incoming button, .email-content.incoming .btn, .email-content.incoming a[role=button] {
+          min-width: 120px !important;
+          min-height: 40px !important;
+          padding: 10px 18px !important;
+          font-size: 14px !important;
+          display: inline-block !important;
+          white-space: nowrap !important;
+          margin: 10px auto !important;
+        }
+
+        /* Prevent very long words or strings from breaking layout */
+        .email-content { word-break: break-word !important; overflow-wrap: break-word !important }
+
+        /* Allow very wide legacy templates to scroll horizontally inside their cell rather than break layout */
+        .email-content .email-scroll { overflow:auto; -webkit-overflow-scrolling:touch; }
+
+        /* Center table-cell children anchors */
+        .email-content td > a, .email-content th > a { display:inline-block!important;margin:8px auto!important }
+      </style>`;
+    const wrapperClass = isSent ? 'email-content sent' : 'email-content incoming';
+    return `${style}<div class="${wrapperClass}" style="font-size:12px;line-height:1.4;color:inherit">${inner}</div>`;
   } catch (error) {
     console.error('HTML Sanitization error:', error);
     // If sanitization fails, return escaped text
@@ -139,8 +231,44 @@ const getSourceImage = (source) => {
   return null;
 };
 
-export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollToMessage }) {
+// Helper to convert plain text containing URLs into React nodes (clickable links)
+const createLinkifiedNodes = (text, keyBase = 'l') => {
+  if (!text || typeof text !== 'string') return [text];
+  const urlRegex = /(?:https?:\/\/|www\.)[^\s<]+/gi;
+  const nodes = [];
+  let lastIndex = 0;
+  let match;
+  let idx = 0;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(<span key={`${keyBase}-${idx++}`}>{text.slice(lastIndex, match.index)}</span>);
+    }
+    const raw = match[0];
+    const href = raw.startsWith('http') ? raw : `http://${raw}`;
+    nodes.push(
+      <a key={`${keyBase}-a-${idx++}`} href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
+        {raw}
+      </a>
+    );
+    lastIndex = urlRegex.lastIndex;
+  }
+  if (lastIndex < text.length) nodes.push(<span key={`${keyBase}-${idx++}`}>{text.slice(lastIndex)}</span>);
+  return nodes;
+};
+
+function MessageBubble({ 
+  msg, 
+  onReply, 
+  isStarted, 
+  allMessages, 
+  onScrollToMessage,
+  onUpdateMessage,
+  onRequestResolveMessage,
+  inboxId
+}) {
   const [showReplyPreview, setShowReplyPreview] = useState(false);
+  // Local optimistic status so UI updates immediately on button clicks
+  const [localStatus, setLocalStatus] = useState(null);
 
   // Determine if message was sent by user/agent
   const isSent = msg.isSent === true;
@@ -156,6 +284,7 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
   };
 
   const repliedMessage = getRepliedMessage();
+  const effectiveStatus = localStatus ?? msg.status;
 
   // Bubble styling based on isSent
   const bubbleStyle = {
@@ -164,23 +293,40 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
     marginLeft: isSent ? 'auto' : 0,
     padding: '16px',
     borderRadius: '16px',
-    background: isSent ? '#6366f1' : '#fff',
-    color: isSent ? '#fff' : '#0f172a',
+    background:  '#fff',
+    color: isSent ? '#0f172a' : '#0f172a',
     boxShadow: isSent 
       ? '0 4px 12px rgba(99, 102, 241, 0.3)' 
       : '0 2px 8px rgba(0,0,0,0.08)',
     wordBreak: 'break-word',
   };
 
+  // Base style used for action buttons to ensure adaptive sizing and prevent overlap
+  const actionBtnBase = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 10px',
+    fontSize: '12px',
+    fontWeight: 600,
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.12s ease',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box',
+    flex: '0 0 auto',
+  };
+
   // Reply quote styling
   const replyQuoteStyle = {
-    padding: '12px',
-    marginBottom: '12px',
-    borderLeft: `3px solid ${isSent ? 'rgba(255,255,255,0.4)' : '#6366f1'}`,
-    background: isSent ? 'rgba(255,255,255,0.1)' : 'rgba(99, 102, 241, 0.05)',
-    borderRadius: '4px',
-    fontSize: '13px',
-    opacity: 0.85,
+    padding: '10px',
+    marginBottom: '10px',
+    borderLeft: `3px solid ${isSent ? '#c7c7c7' : '#4f46e5'}`,
+    background: isSent ? '#f8fafc' : 'rgba(79,70,229,0.04)',
+    borderRadius: '8px',
+    fontSize: '12px',
+    color: isSent ? '#111827' : '#374151',
+    opacity: 0.95,
   };
 
   // Render formatted content based on contentType
@@ -202,14 +348,15 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
     }
 
     if (contentType === 'html') {
-      const sanitizedHTML = sanitizeAndFixHTML(contentValue);
+      const sanitizedHTML = sanitizeAndFixHTML(contentValue, isSent);
       return (
         <div
-          style={{ fontSize: '13px', wordBreak: 'break-word' }}
+          style={{ fontSize: '12px', wordBreak: 'break-word' }}
           dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
         />
       );
     }
+
 
     if (contentType === 'special') {
       // WhatsApp formatting: *bold*, _italic_, ~strikethrough~, ```monospace```
@@ -222,10 +369,10 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
             return (
               <code key={partIdx} style={{ 
                 background: '#f1f5f9', 
-                padding: '4px 8px', 
-                borderRadius: '4px',
+                padding: '3px 6px', 
+                borderRadius: '3px',
                 fontFamily: 'monospace',
-                fontSize: '12px'
+                fontSize: '11px'
               }}>
                 {code}
               </code>
@@ -236,12 +383,12 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
             if (idx % 4 === 1) return <strong key={`${partIdx}-${idx}`}>{subPart}</strong>;
             if (idx % 4 === 2) return <em key={`${partIdx}-${idx}`}>{subPart}</em>;
             if (idx % 4 === 3) return <del key={`${partIdx}-${idx}`}>{subPart}</del>;
-            return <span key={`${partIdx}-${idx}`}>{subPart}</span>;
+            return createLinkifiedNodes(subPart, `r-${partIdx}-${idx}`);
           });
         });
       };
       return (
-        <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        <div style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {formatText(contentValue)}
         </div>
       );
@@ -264,21 +411,126 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
 
     // Replace placeholders in body text with parameter values
     let bodyText = bodyComponent?.text || '';
-    if (template.parameters && Array.isArray(template.parameters)) {
-      template.parameters.forEach(param => {
-        if (param.name && param.value) {
-          const escapedPlaceholder = param.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          bodyText = bodyText.replace(new RegExp(escapedPlaceholder, 'g'), param.value);
-        }
+
+    // Gather parameters from several possible locations (template.parameters, msg.parameters, etc.)
+    const paramSources = [];
+    if (Array.isArray(template.parameters)) paramSources.push(...template.parameters);
+    if (Array.isArray(msg?.parameters)) paramSources.push(...msg.parameters);
+    if (Array.isArray(msg?.templateParameters)) paramSources.push(...msg.templateParameters);
+    if (Array.isArray(msg?.template_parameters)) paramSources.push(...msg.template_parameters);
+
+    // Normalize into map by name for quick lookup
+    const paramMap = {};
+    paramSources.forEach(p => {
+      if (!p) return;
+      const name = p.name || p.key || p.placeholder || '';
+      const value = p.value ?? p.text ?? p.payload ?? '';
+      if (name) paramMap[name] = value;
+    });
+
+    // If template has components parameters embedded, also include them
+    if (Array.isArray(template.parameters)) {
+      template.parameters.forEach(p => {
+        const name = p.name || p.key || '';
+        const value = p.value ?? p.text ?? '';
+        if (name) paramMap[name] = value;
       });
     }
+
+    // Replace placeholders using several common placeholder formats
+    Object.keys(paramMap).forEach((rawName) => {
+      const value = paramMap[rawName] ?? '';
+      if (value === undefined || value === null) return;
+
+      // Normalize key by stripping surrounding braces and whitespace
+      const normalized = String(rawName).replace(/^\s*\{+|\}+\s*$/g, '').trim();
+
+      // Build regex patterns to match common placeholder styles robustly
+      const patterns = [
+        // exact double-brace with optional spaces: {{ key }}
+        new RegExp(`\\{\\{\\s*${normalized.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\s*\\}\\}`, 'g'),
+        // single brace: {key}
+        new RegExp(`\\{\\s*${normalized.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\s*\\}`, 'g'),
+        // plain key (word or number) - match as whole word
+        new RegExp(`\\b${normalized.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'g')
+      ];
+
+      patterns.forEach((rx) => {
+        try {
+          bodyText = bodyText.replace(rx, value);
+        } catch (e) {
+          // ignore
+        }
+      });
+    });
+
+    // Reuse formatting logic from WhatsApp preview: handle code blocks and inline styles
+    const formatWhatsAppText = (text, fontSize = '13px') => {
+      if (!text) return null;
+      const codeRegex = /```([\s\S]*?)```/g;
+      const segments = [];
+      let lastIndex = 0;
+      let match;
+      while ((match = codeRegex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+        }
+        segments.push({ type: 'code', content: match[1] });
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < text.length) segments.push({ type: 'text', content: text.slice(lastIndex) });
+
+      let keyCounter = 0;
+      const processInline = (str) => {
+        const nodes = [];
+        const inlineRegex = /(\*(.*?)\*)|(_(.*?)_)|(~(.*?)~)/g;
+        let last = 0;
+        let m;
+        while ((m = inlineRegex.exec(str)) !== null) {
+          if (m.index > last) nodes.push(...createLinkifiedNodes(str.slice(last, m.index), `s-${keyCounter++}`));
+          const full = m[0];
+          const inner = m[2] ?? m[4] ?? m[6] ?? '';
+          if (full.startsWith('*')) nodes.push(<strong key={keyCounter++}>{inner}</strong>);
+          else if (full.startsWith('_')) nodes.push(<em key={keyCounter++}>{inner}</em>);
+          else if (full.startsWith('~')) nodes.push(<del key={keyCounter++}>{inner}</del>);
+          last = m.index + full.length;
+        }
+        if (last < str.length) nodes.push(...createLinkifiedNodes(str.slice(last), `s-${keyCounter++}`));
+        return nodes;
+      };
+
+      return segments.flatMap((seg) => {
+        if (seg.type === 'code') {
+          return (
+            <code key={`code-${keyCounter++}`} style={{
+              background: '#f1f5f9',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              display: 'block',
+              whiteSpace: 'pre-wrap',
+              marginBottom: '8px'
+            }}>
+              {seg.content}
+            </code>
+          );
+        }
+        const lines = seg.content.split(/\n/);
+        return lines.flatMap((line, idx) => {
+          const processed = processInline(line);
+          if (idx < lines.length - 1) return [...processed, <br key={`br-${keyCounter++}`} />];
+          return processed;
+        });
+      });
+    };
 
     return (
       <div style={{ fontSize: '14px', wordBreak: 'break-word' }}>
         {/* Body Text */}
         {bodyComponent && (
           <div style={{ marginBottom: '12px', whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.5' }}>
-            {bodyText}
+            {formatWhatsAppText(bodyText)}
           </div>
         )}
 
@@ -292,25 +544,22 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  display: 'block',
-                  padding: '10px 16px',
-                  borderRadius: '6px',
-                  background: isSent ? 'rgba(255,255,255,0.2)' : '#6366f1',
+                  ...actionBtnBase,
+                  display: 'inline-flex',
+                  padding: '8px 12px',
+                  background: isSent ? 'rgba(255,255,255,0.08)' : '#111827',
                   color: '#fff',
                   textDecoration: 'none',
                   textAlign: 'center',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  border: `1px solid ${isSent ? 'rgba(255,255,255,0.3)' : 'rgba(99, 102, 241, 0.5)'}`,
-                  transition: 'all 0.2s',
+                  border: `1px solid ${isSent ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.06)'}`,
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.opacity = '0.8';
-                  e.target.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.opacity = '0.9';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.opacity = '1';
-                  e.target.style.transform = 'translateY(0)';
+                  e.currentTarget.style.opacity = '1';
+                  e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
                 {btn.text}
@@ -349,7 +598,7 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
     }
 
     if (contentType === 'html') {
-      const sanitizedHTML = sanitizeAndFixHTML(contentValue);
+      const sanitizedHTML = sanitizeAndFixHTML(contentValue, isSent);
       return (
         <div
           style={{ fontSize: '14px', wordBreak: 'break-word' }}
@@ -367,7 +616,7 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
               if (idx % 4 === 1) return <strong key={idx}>{part}</strong>;
               if (idx % 4 === 2) return <em key={idx}>{part}</em>;
               if (idx % 4 === 3) return <del key={idx}>{part}</del>;
-              return <span key={idx}>{part}</span>;
+              return createLinkifiedNodes(part, `cs-${idx}`);
             })}
           </div>
         );
@@ -420,14 +669,16 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
             }
           }}
         >
-          <div style={{ fontWeight: 600, marginBottom: '4px', opacity: 0.9, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '14px' }}>⤴</span>
-            <span>In reply to:</span>
+          <div style={{ fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px', color: 'inherit' }}>
+            <span style={{ fontSize: '13px', opacity: 0.9 }}>⤴</span>
+            <span style={{ fontSize: '13px', opacity: 0.95 }}>In reply to</span>
           </div>
           <div style={{ 
             fontSize: '12px',
             opacity: 0.9,
-            maxWidth: '100%'
+            maxWidth: '100%',
+            fontStyle: 'italic',
+            color: 'inherit'
           }}>
             {renderFormattedContent(
               repliedMessage.content || repliedMessage.body || repliedMessage.text,
@@ -452,7 +703,7 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
             alignItems: 'center',
             gap: '6px',
             borderBottom: `2px solid ${
-              isSent ? 'rgba(255,255,255,0.3)' : 'rgba(99, 102, 241, 0.3)'
+              isSent ? '#8a7e7e' : '#8a7e7e'
             }`,
             paddingBottom: '8px',
             textAlign: 'center',
@@ -502,6 +753,130 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
         </div>
       )}
 
+      {/* Conditional Action Buttons - Email only */}
+      {msg.source === 'email' && (
+        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: `1px solid ${isSent ? 'rgba(255,255,255,0.2)' : 'rgba(99, 102, 241, 0.1)'}` }}>
+          {effectiveStatus === 'resolved' ? (
+            // Resolved: show labeled fields for clarity
+            <div style={{ padding: '10px', borderRadius: '8px', background: isSent ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: `1px solid ${isSent ? 'rgba(255,255,255,0.06)' : '#e6eef8'}`, color: isSent ? 'rgba(255,255,255,0.95)' : '#0f172a' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, minWidth: '90px' }}>Status:</div>
+                <div style={{ fontSize: '12px' }}>Resolved</div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, minWidth: '90px' }}>Query Type:</div>
+                <div style={{ fontSize: '12px', color: isSent ? 'rgba(255,255,255,0.9)' : '#374151' }}>{msg.queryType || '—'}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, minWidth: '90px' }}>Resolved by:</div>
+                <div style={{ fontSize: '12px', color: isSent ? 'rgba(255,255,255,0.9)' : '#374151' }}>{msg.resolvedBy || '—'}</div>
+              </div>
+            </div>
+          ) : (
+            // Unread or Read: action buttons with icons
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              {effectiveStatus === 'unread' && onUpdateMessage && (
+                <>
+                  <button
+                    title="Mark as read"
+                    onClick={() => {
+                      setLocalStatus('read');
+                      onUpdateMessage(inboxId, msg._id, 'read');
+                    }}
+                      style={{
+                        ...actionBtnBase,
+                        gap: '8px',
+                        padding: '6px 10px',
+                        fontSize: '12px',
+                        border: `1px solid ${isSent ? 'rgba(255,255,255,0.12)' : '#e6eaf2'}`,
+                        borderRadius: '8px',
+                        background: isSent ? 'rgba(255,255,255,0.06)' : '#ffffff',
+                        color: isSent ? '#fff' : '#111827',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = isSent ? 'rgba(255,255,255,0.09)' : '#f8fafc'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = isSent ? 'rgba(255,255,255,0.06)' : '#ffffff'; }}
+                  >
+                    <span>👁</span> Read
+                  </button>
+                  <button
+                    title="Ignore this message"
+                    onClick={() => {
+                      setLocalStatus('ignore');
+                      onUpdateMessage(inboxId, msg._id, 'ignore');
+                    }}
+                    style={{
+                      ...actionBtnBase,
+                      gap: '8px',
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      border: `1px solid ${isSent ? 'rgba(244,67,54,0.16)' : '#fcd34d'}`,
+                      borderRadius: '8px',
+                      background: isSent ? 'rgba(244,67,54,0.12)' : '#fff7ed',
+                      color: isSent ? '#fff' : '#92400e',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = isSent ? 'rgba(244,67,54,0.18)' : '#fde68a'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = isSent ? 'rgba(244,67,54,0.12)' : '#fff7ed'; }}
+                  >
+                    <span>⏭</span> Skip
+                  </button>
+                </>
+              )}
+              {effectiveStatus === 'read' && onUpdateMessage && (
+                <>
+                  <button
+                    title="Mark as unread"
+                    onClick={() => {
+                      setLocalStatus('unread');
+                      onUpdateMessage(inboxId, msg._id, 'unread');
+                    }}
+                      style={{
+                        ...actionBtnBase,
+                        gap: '8px',
+                        padding: '6px 10px',
+                        fontSize: '12px',
+                        border: `1px solid ${isSent ? 'rgba(255,255,255,0.12)' : '#e6eaf2'}`,
+                        borderRadius: '8px',
+                        background: isSent ? 'rgba(255,255,255,0.06)' : '#f8f7ff',
+                        color: isSent ? '#fff' : '#4f46e5',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = isSent ? 'rgba(255,255,255,0.09)' : '#f0eeff'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = isSent ? 'rgba(255,255,255,0.06)' : '#f8f7ff'; }}
+                  >
+                    <span>📖</span> Unread
+                  </button>
+                  <button
+                    title="Mark as resolved"
+                    onClick={() => {
+                      // Open resolve modal for message if provided
+                      if (typeof onRequestResolveMessage === 'function') {
+                        onRequestResolveMessage(msg);
+                        return;
+                      }
+                      setLocalStatus('resolved');
+                      onUpdateMessage(inboxId, msg._id, 'resolved');
+                    }}
+                    style={{
+                      ...actionBtnBase,
+                      gap: '8px',
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      border: `1px solid ${isSent ? 'rgba(34,197,94,0.16)' : '#bbf7d0'}`,
+                      borderRadius: '8px',
+                      background: isSent ? 'rgba(34,197,94,0.12)' : '#ecfdf5',
+                      color: isSent ? '#fff' : '#059669',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = isSent ? 'rgba(34,197,94,0.18)' : '#bbf7d0'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = isSent ? 'rgba(34,197,94,0.12)' : '#ecfdf5'; }}
+                  >
+                    <span>✅</span> Resolve
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Footer with timestamp and reply button */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
         <span style={{ fontSize: '11px', opacity: 0.7 }}>
@@ -529,3 +904,18 @@ export function MessageBubble({ msg, onReply, isStarted, allMessages, onScrollTo
     </div>
   );
 }
+
+const propsAreEqual = (prevProps, nextProps) => {
+  // Prefer to re-render only when the message content or status changes or when inbox selection changes
+  const p = prevProps.msg || {};
+  const n = nextProps.msg || {};
+  if (p._id !== n._id) return false;
+  if (p.status !== n.status) return false;
+  if ((p.body || p.text || p.content) !== (n.body || n.text || n.content)) return false;
+  if ((p.html || p.htmlContent) !== (n.html || n.htmlContent)) return false;
+  if ((p.updatedAt || '') !== (n.updatedAt || '')) return false;
+  // ignore handler reference changes; assume visual-only updates handled locally
+  return true;
+};
+
+export default React.memo(MessageBubble, propsAreEqual);
