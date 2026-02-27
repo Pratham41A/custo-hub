@@ -449,7 +449,15 @@ export default function InboxPage() {
     setShowContextPanel(false);
     try {
       await fetchMessages(inbox._id);
-      // Do NOT call updateInboxStatus here - user requested no status-changing API calls when opening inbox
+      // If this inbox is from WhatsApp, mark it as read on open
+      try {
+        if (inbox?.source === 'whatsapp' && inbox?.status !== 'read') {
+          await updateInboxStatus(inbox._id, 'read');
+        }
+      } catch (e) {
+        // Ignore marking error but log for debugging
+        console.error('Failed to mark WhatsApp inbox read:', e);
+      }
     } catch (error) {
       showToast('Failed to load messages', 'error');
     }
