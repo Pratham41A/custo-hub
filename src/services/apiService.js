@@ -42,9 +42,19 @@ class ApiService {
     }
   }
 
-  // Dashboard - GET /dashboards
-  async getDashboards() {
-    return this.request('/dashboards');
+  // Dashboard - GET /dashboards with optional date filters
+  async getDashboards({ startDate = '', endDate = '' } = {}) {
+    let endpoint = '/dashboards';
+    const params = [];
+    
+    if (startDate) params.push(`startDate=${encodeURIComponent(startDate)}`);
+    if (endDate) params.push(`endDate=${encodeURIComponent(endDate)}`);
+    
+    if (params.length > 0) {
+      endpoint += '?' + params.join('&');
+    }
+    
+    return this.request(endpoint);
   }
 
   // Inboxes - GET /inboxes/:status (pass empty string or omit for all)

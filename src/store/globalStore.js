@@ -64,11 +64,15 @@ export const useGlobalStore = create((set, get) => ({
   setPagination: (pagination) => set({ pagination }),
   
   // API Actions
-  fetchDashboard: async () => {
-    const { setLoading, setDashboardData } = get();
+  fetchDashboard: async (options = {}) => {
+    const { setLoading, setDashboardData, dateRange } = get();
     setLoading('dashboard', true);
     try {
-      const data = await apiService.getDashboards();
+      const params = {
+        startDate: options.startDate ?? dateRange.start ?? '',
+        endDate: options.endDate ?? dateRange.end ?? '',
+      };
+      const data = await apiService.getDashboards(params);
       setDashboardData(data);
       return data;
     } catch (error) {

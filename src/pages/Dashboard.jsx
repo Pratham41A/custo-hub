@@ -20,30 +20,46 @@ export default function Dashboard() {
   const fetchDashboard = useGlobalStore(state => state.fetchDashboard);
   const fetchInboxes = useGlobalStore(state => state.fetchInboxes);
   const loading = useGlobalStore(state => state.loading);
+  const dateRange = useGlobalStore(state => state.dateRange);
+  const setDateRange = useGlobalStore(state => state.setDateRange);
   const stats = getDashboardStats();
   const [message, setMessage] = useState({ text: '', type: '' });
   const [queryTypeSearch, setQueryTypeSearch] = useState('');
+  const [startDate, setStartDate] = useState(dateRange.start || '');
+  const [endDate, setEndDate] = useState(dateRange.end || '');
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (options = {}) => {
     try {
-      await Promise.all([fetchDashboard(), fetchInboxes({ limit: 100 })]);
+      await Promise.all([
+        fetchDashboard(options),
+        fetchInboxes({ limit: 100, ...options })
+      ]);
     } catch {
       showMessage('Failed to load dashboard data', 'error');
     }
   };
 
+  const handleStartDateChange = (value) => {
+    setStartDate(value);
+    const newEndDate = endDate;
+    setDateRange({ start: value, end: newEndDate });
+    loadData({ startDate: value, endDate: newEndDate });
+  };
+
+  const handleEndDateChange = (value) => {
+    setEndDate(value);
+    const newStartDate = startDate;
+    setDateRange({ start: newStartDate, end: value });
+    loadData({ startDate: newStartDate, endDate: value });
+  };
+
   const showMessage = (text, type) => {
     setMessage({ text, type });
     setTimeout(() => setMessage({ text: '', type: '' }), 1000);
-  };
-
-  const handleRefresh = () => {
-    loadData();
-    showMessage('Refreshing dashboard...', 'info');
   };
 
   // Calculate total count of all statuses
@@ -170,6 +186,95 @@ export default function Dashboard() {
         {isLoading && (
           <div style={{ height: '4px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: '2px', marginBottom: '24px', animation: 'pulse 1.5s infinite' }} />
         )}
+
+        {/* Date Range Filter Section */}
+        <div
+  style={{
+    background: 'linear-gradient(135deg, #f8f9ff 0%, #fff 100%)',
+    borderRadius: '16px',
+    padding: '24px',
+    border: '1px solid rgba(99, 102, 241, 0.1)',
+    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.08)',
+    margin: '0 auto 32px auto',   // 👈 centers horizontally
+    position: 'relative',
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: '600px',            // 👈 controls how wide it can be
+  }}
+>
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '3px',
+            background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1)',
+            backgroundSize: '200% 100%',
+          }} />
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '16px',
+          }}>
+            <div style={{
+              position: 'relative',
+              alignContent:'center'
+            }}>
+              <label style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: '#4b5563',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}>
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                style={{
+                  ...inputStyle,
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  borderColor: startDate ? '#6366f1' : 'rgba(0,0,0,0.1)',
+                  backgroundColor: startDate ? '#f8f9ff' : '#fff',
+                }}
+              />
+            </div>
+
+            <div style={{
+              position: 'relative',
+            }}>
+              <label style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: '#4b5563',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}>
+                End Date
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                style={{
+                  ...inputStyle,
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  borderColor: endDate ? '#6366f1' : 'rgba(0,0,0,0.1)',
+                  backgroundColor: endDate ? '#f8f9ff' : '#fff',
+                }}
+              />
+            </div>
+          </div>
+        </div>
 
         <div style={cardGridStyle}>
           {statCards.map((stat) => (
