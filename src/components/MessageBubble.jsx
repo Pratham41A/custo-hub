@@ -378,13 +378,38 @@ function MessageBubble({
               </code>
             );
           }
-          // Then handle *bold*, _italic_, ~strikethrough~
-          return part.split(/\*(.*?)\*|_(.*?)_|~(.*?)~/g).map((subPart, idx) => {
-            if (idx % 4 === 1) return <strong key={`${partIdx}-${idx}`}>{subPart}</strong>;
-            if (idx % 4 === 2) return <em key={`${partIdx}-${idx}`}>{subPart}</em>;
-            if (idx % 4 === 3) return <del key={`${partIdx}-${idx}`}>{subPart}</del>;
-            return createLinkifiedNodes(subPart, `r-${partIdx}-${idx}`);
-          });
+          // Then handle *bold*, _italic_, ~strikethrough~ with recursive parser
+          const parseInline = (text) => {
+            const nodes = [];
+            let j = 0;
+            while (j < text.length) {
+              const c = text[j];
+              if (c === '*' || c === '_' || c === '~') {
+                const closeIdx = text.indexOf(c, j + 1);
+                if (closeIdx > -1) {
+                  // add any preceding plain text
+                  if (j > 0) {
+                    nodes.push(...createLinkifiedNodes(text.slice(0, j), `r-${partIdx}-pre`));
+                  }
+                  const inner = text.slice(j + 1, closeIdx);
+                  const innerNodes = parseInline(inner);
+                  if (c === '*') nodes.push(<strong key={`p-${partIdx}-${j}`}>{innerNodes}</strong>);
+                  else if (c === '_') nodes.push(<em key={`p-${partIdx}-${j}`}>{innerNodes}</em>);
+                  else if (c === '~') nodes.push(<del key={`p-${partIdx}-${j}`}>{innerNodes}</del>);
+                  const remaining = text.slice(closeIdx + 1);
+                  if (remaining) {
+                    nodes.push(...parseInline(remaining));
+                  }
+                  return nodes;
+                }
+              }
+              j += 1;
+            }
+            // no more markers
+            nodes.push(...createLinkifiedNodes(text, `r-${partIdx}-end`));
+            return nodes;
+          };
+          return parseInline(part);
         });
       };
       return (

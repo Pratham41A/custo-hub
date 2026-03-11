@@ -19,6 +19,7 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
     const saved = localStorage.getItem(WHATSAPP_STORAGE_KEY);
     return saved ? JSON.parse(saved).mobile || '' : '';
   })());
+  const [focusedParamName, setFocusedParamName] = useState(null);
 
   const whatsappTemplates = useGlobalStore(state => state.whatsappTemplates);
   const fetchWhatsappTemplates = useGlobalStore(state => state.fetchWhatsappTemplates);
@@ -115,6 +116,61 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
   const handleCancel = () => {
     // Keep localStorage data - don't clear on cancel
     onCancel();
+  };
+
+  const applyFormatting = (formatType, inputElement = null) => {
+    if (!focusedParamName) {
+      if (!inputElement) {
+        alert('Please select a parameter field first');
+        return;
+      }
+    }
+
+    const element = inputElement || document.querySelector(`input[data-param="${focusedParamName}"]`);
+    if (!element) return;
+
+    const start = element.selectionStart;
+    const end = element.selectionEnd;
+    const selectedText = element.value.substring(start, end);
+
+    if (!selectedText) {
+      alert('Please select text in the field to format');
+      return;
+    }
+
+    let formattedText;
+    if (formatType === 'bold') {
+      // toggle: remove surrounding asterisks if already bold
+      if (selectedText.startsWith('*') && selectedText.endsWith('*')) {
+        formattedText = selectedText.slice(1, -1);
+      } else {
+        formattedText = `*${selectedText}*`;
+      }
+    } else if (formatType === 'italic') {
+      // toggle: remove surrounding underscores if already italic
+      if (selectedText.startsWith('_') && selectedText.endsWith('_')) {
+        formattedText = selectedText.slice(1, -1);
+      } else {
+        formattedText = `_${selectedText}_`;
+      }
+    }
+
+    const newValue = element.value.substring(0, start) + formattedText + element.value.substring(end);
+    handleParameterChange(focusedParamName, newValue);
+
+    // Restore focus to input
+    setTimeout(() => element.focus(), 0);
+  };
+
+  const handleKeyDown = (e) => {
+    // Ctrl+B for bold, Ctrl+I for italic
+    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      e.preventDefault();
+      applyFormatting('bold', e.target);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+      e.preventDefault();
+      applyFormatting('italic', e.target);
+    }
   };
 
   // Layout Styles
@@ -277,6 +333,25 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
     fontSize: '14px',
   };
 
+  const formattingButtonStyle = {
+    padding: '8px 12px',
+    background: '#f1f5f9',
+    color: '#475569',
+    border: '1px solid #cbd5e1',
+    borderRadius: '5px',
+    cursor: 'pointer',
+    fontWeight: 600,
+    fontSize: '13px',
+    transition: 'all 0.2s',
+  };
+
+  const formattingButtonsContainerStyle = {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '12px',
+    alignItems: 'center',
+  };
+
   const renderTemplatePreview = () => {
     if (!selectedTemplate) {
       return (
@@ -353,23 +428,42 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
 
         // Helper to process inline formatting within non-code segments
         let keyCounter = 0;
+        // parse a string with Whatsapp-style markers (*bold*, _italic_, ~strike~)
+        // supports nesting by consuming the first matching pair of the same
+        // delimiter and recursively processing the inner text.
         const processInline = (str) => {
           const nodes = [];
-          const inlineRegex = /(\*(.*?)\*)|(_(.*?)_)|(~(.*?)~)/g;
-          let last = 0;
-          let m;
-          while ((m = inlineRegex.exec(str)) !== null) {
-            if (m.index > last) {
-              nodes.push(...createNodesFromText(str.slice(last, m.index), `t-${keyCounter++}`));
+          let i = 0;
+          while (i < str.length) {
+            const ch = str[i];
+            if (ch === '*' || ch === '_' || ch === '~') {
+              const closing = str.indexOf(ch, i + 1);
+              if (closing > -1) {
+                // process text before this marker
+                if (i > 0) {
+                  nodes.push(...createNodesFromText(str.slice(0, i), `t-${keyCounter++}`));
+                }
+                const innerText = str.slice(i + 1, closing);
+                const innerNodes = processInline(innerText);
+                let element;
+                if (ch === '*') element = <strong key={`s-${keyCounter++}`}>{innerNodes}</strong>;
+                else if (ch === '_') element = <em key={`s-${keyCounter++}`}>{innerNodes}</em>;
+                else if (ch === '~') element = <del key={`s-${keyCounter++}`}>{innerNodes}</del>;
+                nodes.push(element);
+                // continue parsing after the closing marker
+                const rest = str.slice(closing + 1);
+                if (rest.length) {
+                  nodes.push(...processInline(rest));
+                }
+                return nodes;
+              }
             }
-            const full = m[0];
-            const inner = m[2] ?? m[4] ?? m[6] ?? '';
-            if (full.startsWith('*')) nodes.push(<strong key={`s-${keyCounter++}`}>{inner}</strong>);
-            else if (full.startsWith('_')) nodes.push(<em key={`s-${keyCounter++}`}>{inner}</em>);
-            else if (full.startsWith('~')) nodes.push(<del key={`s-${keyCounter++}`}>{inner}</del>);
-            last = m.index + full.length;
+            i += 1;
           }
-          if (last < str.length) nodes.push(...createNodesFromText(str.slice(last), `t-${keyCounter++}`));
+          // no more markers, just plain text
+          if (str.length) {
+            nodes.push(...createNodesFromText(str, `t-${keyCounter++}`));
+          }
           return nodes;
         };
 
@@ -492,14 +586,20 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
         {selectedTemplate && selectedTemplate.parameters && selectedTemplate.parameters.length > 0 && (
           <div style={parametersContainerStyle}>
             <label style={sectionTitleStyle}>Parameters</label>
+
             {selectedTemplate.parameters.map((param) => (
               <div key={param.name} style={parameterRowStyle}>
                 <label style={labelStyle}>{param.name}</label>
                 <input
                   type="text"
                   style={inputStyle}
+                  data-param={param.name}
                   value={parameters[param.name] || ''}
                   onChange={(e) => handleParameterChange(param.name, e.target.value)}
+                  onFocus={() => setFocusedParamName(param.name)}
+                  onBlur={() => setFocusedParamName(null)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Type text • Ctrl+B for bold • Ctrl+I for italic`}
                 />
               </div>
             ))}
