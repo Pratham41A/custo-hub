@@ -695,6 +695,19 @@ export default function InboxPage() {
       showToast('Please fill in email and body', 'error');
       return;
     }
+
+    // as a safety net, normalize here as well
+    const normalized = sendData.htmlBody
+      .replace(/<p([^>]*)>/gi, '<div$1>')
+      .replace(/<\/p>/gi, '</div>');
+    if (normalized !== sendData.htmlBody) {
+      console.log('📧 handleSendEmail normalized body', {
+        before: sendData.htmlBody,
+        after: normalized,
+      });
+      sendData.htmlBody = normalized;
+    }
+
     setSending(true);
     try {
       await sendNewEmail(
@@ -760,7 +773,16 @@ export default function InboxPage() {
         await sendWhatsappMessage(mobile, modal.data.body);
       } else if (modal.data.body) {
         if (!modal.data.toRecipients) throw new Error('To recipient(s) required');
-        await sendEmailReply(msg?.messageId, modal.data.body, modal.data.toRecipients, modal.data.ccRecipients || '', modal.data.bccRecipients || '');
+        // normalize before sending
+        let bodyToSend = modal.data.body;
+        const normalized = bodyToSend
+          .replace(/<p([^>]*)>/gi, '<div$1>')
+          .replace(/<\/p>/gi, '</div>');
+        if (normalized !== bodyToSend) {
+          console.log('🔧 handleReply normalized body', { before: bodyToSend, after: normalized });
+          bodyToSend = normalized;
+        }
+        await sendEmailReply(msg?.messageId, bodyToSend, modal.data.toRecipients, modal.data.ccRecipients || '', modal.data.bccRecipients || '');
       }
       showToast('Reply sent', 'success');
       closeModal();
@@ -799,8 +821,17 @@ export default function InboxPage() {
         const ccToSend = replyForm.ccRecipients && replyForm.ccRecipients.trim() ? replyForm.ccRecipients : '';
         const bccToSend = replyForm.bccRecipients && replyForm.bccRecipients.trim() ? replyForm.bccRecipients : '';
         if (!toRecipients) throw new Error('To recipient(s) not found');
+        // normalize body before API call
+        let bodyToSend = replyForm.body;
+        const normalizedInline = bodyToSend
+          .replace(/<p([^>]*)>/gi, '<div$1>')
+          .replace(/<\/p>/gi, '</div>');
+        if (normalizedInline !== bodyToSend) {
+          console.log('🔧 handleInlineReply normalized body', { before: bodyToSend, after: normalizedInline });
+          bodyToSend = normalizedInline;
+        }
         // include BCC now as well
-        const result = await apiService.sendEmailReply(message?.messageId, replyForm.body, toRecipients, ccToSend, bccToSend);
+        const result = await apiService.sendEmailReply(message?.messageId, bodyToSend, toRecipients, ccToSend, bccToSend);
       } else {
         // Send WhatsApp Reply
         const mobile = resolveMobile(selectedInbox, message);

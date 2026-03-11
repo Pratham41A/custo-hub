@@ -79,10 +79,21 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
       bccRecipients: bccRecipients.trim(),
     });
 
+    // Normalize the body so that Outlook API sees `div` containers
+    // instead of default `<p>` tags. Quill inserts paragraphs which can
+    // render as extra space in some clients. We convert them here to
+    // avoid the extra line breaks the backend reported.
+    const normalizedBody = htmlBody
+      .replace(/<p([^>]*)>/gi, '<div$1>')
+      .replace(/<\/p>/gi, '</div>');
+
+    // debug: log both versions so we can verify transform in console/network
+    console.log('📧 OutlookEditor sending body', { original: htmlBody, normalized: normalizedBody });
+
     onSend({
       toRecipients: email.trim(),
       subject: isReply ? '' : subject.trim(),
-      htmlBody,
+      htmlBody: normalizedBody,
       ccRecipients: ccRecipients.trim(),
       bccRecipients: bccRecipients.trim(),
     });

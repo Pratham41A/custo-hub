@@ -427,6 +427,16 @@ export const sendWhatsappMessage = (mobile, body) => async (dispatch, getState) 
 };
 
 export const sendEmailReply = (replyMessageId, htmlBody, toRecipients = '', ccRecipients = '', bccRecipients = '') => async (dispatch, getState) => {
+  // normalize paragraph tags to divs as a safety measure
+  if (htmlBody) {
+    const normalized = htmlBody
+      .replace(/<p([^>]*)>/gi, '<div$1>')
+      .replace(/<\/p>/gi, '</div>');
+    if (normalized !== htmlBody) {
+      console.log('🔧 globalStore sending normalized reply body', { before: htmlBody, after: normalized });
+      htmlBody = normalized;
+    }
+  }
   try {
     const result = await apiService.sendEmailReply(replyMessageId, htmlBody, toRecipients, ccRecipients, bccRecipients);
     const msg = result?.message || result?.data || result;
@@ -460,6 +470,17 @@ export const sendEmailReply = (replyMessageId, htmlBody, toRecipients = '', ccRe
 };
 
 export const sendNewEmail = (email, subject, htmlBody, ccRecipients = '', bccRecipients = '') => async (dispatch, getState) => {
+  // global normalization: replace any <p> tags before hitting the API
+  if (htmlBody) {
+    const normalized = htmlBody
+      .replace(/<p([^>]*)>/gi, '<div$1>')
+      .replace(/<\/p>/gi, '</div>');
+    if (normalized !== htmlBody) {
+      console.log('🔧 globalStore sending normalized new email body', { before: htmlBody, after: normalized });
+      htmlBody = normalized;
+    }
+  }
+
   try {
     const result = await apiService.sendNewEmail(email, subject, htmlBody, ccRecipients, bccRecipients);
     const msg = result?.message || result?.data || result;
