@@ -109,6 +109,40 @@ export default function InboxPage() {
 
   useEffect(() => { fetchQueryTypes(); }, []);
 
+  // Load inline email compose form from localStorage when inbox is selected
+  useEffect(() => {
+    if (selectedInbox?._id && composingType === 'email') {
+      const storageKey = `email_inbox_${selectedInbox._id}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setComposeForm(prev => ({ ...prev, email: parsed.email || '', subject: parsed.subject || '', body: parsed.body || '', ccRecipients: parsed.ccRecipients || '', bccRecipients: parsed.bccRecipients || '' }));
+          console.log('📧 Loaded inline email draft from localStorage:', storageKey);
+        } catch (err) {
+          console.error('Failed to parse saved email draft:', err);
+        }
+      }
+    }
+  }, [selectedInbox?._id, composingType]);
+
+  // Save inline email compose form to localStorage when user types (skip target email field since it may be pre-filled)
+  useEffect(() => {
+    if (selectedInbox?._id && composingType === 'email') {
+      const storageKey = `email_inbox_${selectedInbox._id}`;
+      const draft = {
+        email: composeForm.email,
+        subject: composeForm.subject,
+        body: composeForm.body,
+        ccRecipients: composeForm.ccRecipients,
+        bccRecipients: composeForm.bccRecipients,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(storageKey, JSON.stringify(draft));
+      console.log('💾 Saved inline email draft to localStorage:', storageKey);
+    }
+  }, [composeForm, selectedInbox?._id, composingType]);
+
   // Helper: resolve and format mobile number with country code from multiple possible locations
   // Returns concatenated countrycode + mobileno (e.g., "+919920292920" or "919920292920")
   const resolveMobile = (inbox, message) => {
@@ -1177,7 +1211,7 @@ export default function InboxPage() {
                       onClick={() => {
                         const mobile = resolveMobile(selectedInbox, null) || '';
                         // Always open template modal directly for WhatsApp (inbox context)
-                        setModal({ type: 'whatsapp-compose-template', data: { mobile, inboxSpecific: true } });
+                        setModal({ type: 'whatsapp-compose-template', data: { mobile, inboxSpecific: true, inboxId: selectedInbox?._id } });
                       }}
                     >
                       <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" alt="WhatsApp" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
@@ -1406,8 +1440,8 @@ export default function InboxPage() {
           <div style={{ ...modalStyle, maxWidth: '1200px', width: '95%', maxHeight: '90vh', padding: 0, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
             <WhatsAppTemplateSelector
               recipientMobile={modal.data.mobile || ''}
-              // if inboxSpecific flag is present, disable persistence; otherwise allow global draft
-              storageKey={modal.data?.inboxSpecific ? null : undefined}
+              // use separate inbox-specific key if opened from inbox; otherwise use global default
+              storageKey={modal.data?.inboxSpecific && modal.data?.inboxId ? `whatsapp_inbox_${modal.data.inboxId}` : undefined}
               onSend={(data) => {
                 handleSendWhatsApp(data);
                 closeModal();
@@ -1560,8 +1594,8 @@ export default function InboxPage() {
             <OutlookEditor
               isReply={false}
               recipientEmail={selectedInbox?.owner?.email || selectedInbox?.owner?.dummyOwner?.name || selectedInbox?.dummyOwner?.name || ''}
-              // disable persistence for inbox‑specific composer (global draft should not be reused)
-              storageKey={null}
+              // use inbox-specific storage key so each inbox has its own draft
+              storageKey={selectedInbox?._id ? `email_inbox_${selectedInbox._id}` : null}
               onSend={(data) => {
                 handleSendEmail(data);
               }}
@@ -1577,8 +1611,8 @@ export default function InboxPage() {
             <WhatsAppEditor
               isReply={false}
               recipientMobile={resolveMobile(selectedInbox, null) || ''}
-              // disable persistence for inbox‑specific composer
-              storageKey={null}
+              // use inbox-specific storage key so each inbox has its own draft
+              storageKey={selectedInbox?._id ? `whatsapp_inbox_${selectedInbox._id}` : null}
               onSend={(data) => {
                 handleSendWhatsApp(data);
               }}

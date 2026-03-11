@@ -17,6 +17,9 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
   } else {
     key = storageKey;
   }
+  
+  // DEBUG: log the computed key
+  console.log('📧 OutlookEditor initialized with storageKey prop:', storageKey, '-> computed key:', key);
 
   // Initialize from localStorage or props
   const [email, setEmail] = useState(() => {
@@ -54,15 +57,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
   useEffect(() => {
     if (key === null) return; // skip persisting if storage is disabled
     const draft = { email, subject, htmlBody, ccRecipients, bccRecipients, timestamp: Date.now() };
-    console.log('💾 Saving draft to localStorage:', draft);
-    console.log('🔍 Current state check:', {
-      emailLength: email.length,
-      subjectLength: subject.length,
-      ccLength: ccRecipients.length,
-      bccLength: bccRecipients.length,
-      ccValue: ccRecipients,
-      bccValue: bccRecipients
-    });
+    console.log('💾 Saving email draft to localStorage with key:', key, 'Data:', draft);
     localStorage.setItem(key, JSON.stringify(draft));
   }, [email, subject, htmlBody, ccRecipients, bccRecipients, key]);
 
