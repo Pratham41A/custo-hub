@@ -18,12 +18,33 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? JSON.parse(saved).htmlBody || '' : '';
   });
+  const [ccRecipients, setCcRecipients] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const value = saved ? JSON.parse(saved).ccRecipients || '' : '';
+    console.log('📥 CC initialized from localStorage:', { saved: saved ? JSON.parse(saved) : null, ccRecipients: value });
+    return value;
+  });
+  const [bccRecipients, setBccRecipients] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const value = saved ? JSON.parse(saved).bccRecipients || '' : '';
+    console.log('📥 BCC initialized from localStorage:', { saved: saved ? JSON.parse(saved) : null, bccRecipients: value });
+    return value;
+  });
 
   // Save to localStorage whenever data changes
   useEffect(() => {
-    const draft = { email, subject, htmlBody, timestamp: Date.now() };
+    const draft = { email, subject, htmlBody, ccRecipients, bccRecipients, timestamp: Date.now() };
+    console.log('💾 Saving draft to localStorage:', draft);
+    console.log('🔍 Current state check:', {
+      emailLength: email.length,
+      subjectLength: subject.length,
+      ccLength: ccRecipients.length,
+      bccLength: bccRecipients.length,
+      ccValue: ccRecipients,
+      bccValue: bccRecipients
+    });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-  }, [email, subject, htmlBody]);
+  }, [email, subject, htmlBody, ccRecipients, bccRecipients]);
 
   const handleSend = () => {
     if (!email.trim()) {
@@ -34,10 +55,21 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
       alert('Please enter message body');
       return;
     }
+
+    // Debug log to see actual values
+    console.log('📧 Email Send Debug:', {
+      toRecipients: email.trim(),
+      subject: subject.trim(),
+      ccRecipients: ccRecipients.trim(),
+      bccRecipients: bccRecipients.trim(),
+    });
+
     onSend({
-      email: email.trim(),
+      toRecipients: email.trim(),
       subject: isReply ? '' : subject.trim(),
       htmlBody,
+      ccRecipients: ccRecipients.trim(),
+      bccRecipients: bccRecipients.trim(),
     });
     // Clear localStorage on successful send
     localStorage.removeItem(STORAGE_KEY);
@@ -130,11 +162,42 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
 
       {/* Email Address Field */}
       <div style={{ marginBottom: '16px' }}>
-        <label style={labelStyle}>Email Address</label>
+        <label style={labelStyle}>TO</label>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+           placeholder="email1@example.com,email2@example.com"
+          style={inputStyle}
+        />
+      </div>
+
+      {/* CC Recipients Field */}
+      <div style={{ marginBottom: '16px' }}>
+        <label style={labelStyle}>CC (Optional)</label>
+        <input
+          type="text"
+          placeholder="email1@example.com,email2@example.com"
+          value={ccRecipients}
+          onChange={(e) => {
+            console.log('CC onChange fired:', e.target.value);
+            setCcRecipients(e.target.value);
+          }}
+          style={inputStyle}
+        />
+      </div>
+
+      {/* BCC Recipients Field */}
+      <div style={{ marginBottom: '16px' }}>
+        <label style={labelStyle}>BCC (Optional)</label>
+        <input
+          type="text"
+          placeholder="email1@example.com,email2@example.com"
+          value={bccRecipients}
+          onChange={(e) => {
+            console.log('BCC onChange fired:', e.target.value);
+            setBccRecipients(e.target.value);
+          }}
           style={inputStyle}
         />
       </div>

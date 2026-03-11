@@ -435,9 +435,9 @@ export const sendEmailReply = (replyMessageId, htmlBody, email) => async (dispat
   }
 };
 
-export const sendNewEmail = (email, subject, htmlBody) => async (dispatch, getState) => {
+export const sendNewEmail = (email, subject, htmlBody, ccRecipients = '', bccRecipients = '') => async (dispatch, getState) => {
   try {
-    const result = await apiService.sendNewEmail(email, subject, htmlBody);
+    const result = await apiService.sendNewEmail(email, subject, htmlBody, ccRecipients, bccRecipients);
     const msg = result?.message || result?.data || result;
     if (msg && (msg._id || msg.id)) {
       const state = getState().global;
@@ -657,7 +657,7 @@ export const useGlobalStore = (selector) => {
     sendWhatsappTemplate: (m, t) => dispatch(sendWhatsappTemplate(m, t)),
     sendWhatsappMessage: (m, b) => dispatch(sendWhatsappMessage(m, b)),
     sendEmailReply: (r, h, e) => dispatch(sendEmailReply(r, h, e)),
-    sendNewEmail: (e, s, h) => dispatch(sendNewEmail(e, s, h)),
+    sendNewEmail: (e, s, h, cc = '', bcc = '') => dispatch(sendNewEmail(e, s, h, cc, bcc)),
     createNote: (i, b, d) => dispatch(createNote(i, b, d)),
     fetchQueryTypes: () => dispatch(fetchQueryTypes()),
     createQueryType: (n) => dispatch(createQueryType(n)),

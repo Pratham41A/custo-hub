@@ -108,10 +108,10 @@ class ApiService {
   }
 
   // Outlook New - POST /outlook/new
-  async sendNewEmail(email, subject, htmlBody) {
+  async sendNewEmail(toRecipients, subject, htmlBody, ccRecipients = '', bccRecipients = '') {
     return this.request('/outlook/new', {
       method: 'POST',
-      body: { email, subject, htmlBody },
+      body: { toRecipients, subject, htmlBody, ccRecipients, bccRecipients },
     });
   }
 

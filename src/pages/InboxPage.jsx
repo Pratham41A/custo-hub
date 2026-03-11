@@ -82,7 +82,7 @@ export default function InboxPage() {
   const [replyForm, setReplyForm] = useState({ body: '', template: '' });
   const [hoveredInboxId, setHoveredInboxId] = useState(null);
   const [composingType, setComposingType] = useState(null);
-  const [composeForm, setComposeForm] = useState({ email: '', subject: '', body: '', mobile: '', template: '' });
+  const [composeForm, setComposeForm] = useState({ email: '', subject: '', body: '', ccRecipients: '', bccRecipients: '', mobile: '', template: '' });
   const messagesEndRef = useRef(null);
   const messageRefsMap = useRef({});
 
@@ -489,13 +489,19 @@ export default function InboxPage() {
 
   const handleSendEmail = async (data = null) => {
     const sendData = data || modal.data;
-    if (!sendData.email || !sendData.htmlBody) {
+    if (!sendData.toRecipients || !sendData.htmlBody) {
       showToast('Please fill in email and body', 'error');
       return;
     }
     setSending(true);
     try {
-      await sendNewEmail(sendData.email, sendData.subject || '', sendData.htmlBody);
+      await sendNewEmail(
+        sendData.toRecipients,
+        sendData.subject || '',
+        sendData.htmlBody,
+        sendData.ccRecipients || '',
+        sendData.bccRecipients || ''
+      );
       closeModal();
       // Let socket.io 'message' event handle state updates
     } catch (error) {
@@ -1148,7 +1154,7 @@ export default function InboxPage() {
                       }}
                       onClick={() => {
                         setComposingType('email');
-                        setComposeForm({ email: selectedInbox.owner?.email || selectedInbox.dummyOwner?.email || '', subject: '', body: '', mobile: '', template: '' });
+                        setComposeForm({ email: selectedInbox.owner?.email || selectedInbox.dummyOwner?.email || '', subject: '', body: '', ccRecipients: '', bccRecipients: '', mobile: '', template: '' });
                       }}
                     >
                       <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Email.png" alt="Email" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
@@ -1193,11 +1199,34 @@ export default function InboxPage() {
                         <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
                         <input
                           type="email"
-                          style={{...inputStyle, backgroundColor: (selectedInbox?.owner || selectedInbox?.dummyOwner) ? '#f5f5f5' : '#fff'}}
+                          style={{...inputStyle}}
                           placeholder="Email Address"
                           value={composeForm.email}
                           onChange={(e) => setComposeForm({ ...composeForm, email: e.target.value })}
-                          readOnly={(selectedInbox?.owner || selectedInbox?.dummyOwner) ? true : false}
+                        />
+                      </div>
+
+                      {/* CC Recipients - Compact */}
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>CC (Optional)</label>
+                        <input
+                          type="text"
+                          style={{...inputStyle, marginBottom: '8px'}}
+                          placeholder="email1@example.com, email2@example.com"
+                          value={composeForm.ccRecipients}
+                          onChange={(e) => setComposeForm({ ...composeForm, ccRecipients: e.target.value })}
+                        />
+                      </div>
+
+                      {/* BCC Recipients - Compact */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>BCC (Optional)</label>
+                        <input
+                          type="text"
+                          style={{...inputStyle, marginBottom: '0px'}}
+                          placeholder="email1@example.com, email2@example.com"
+                          value={composeForm.bccRecipients}
+                          onChange={(e) => setComposeForm({ ...composeForm, bccRecipients: e.target.value })}
                         />
                       </div>
                       
@@ -1226,7 +1255,7 @@ export default function InboxPage() {
                           style={buttonStyle('transparent', '#050c18')}
                           onClick={() => {
                             setComposingType(null);
-                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
+                            setComposeForm({ email: '', subject: '', body: '', ccRecipients: '', bccRecipients: '', mobile: '', template: '' });
                           }}
                         >
                           Cancel
@@ -1234,9 +1263,9 @@ export default function InboxPage() {
                         <button
                           style={buttonStyle('#3b82f6', '#fff')}
                           onClick={() => {
-                            handleSendEmail({ email: composeForm.email, subject: composeForm.subject, htmlBody: composeForm.body });
+                            handleSendEmail({ toRecipients: composeForm.email, subject: composeForm.subject, htmlBody: composeForm.body, ccRecipients: composeForm.ccRecipients, bccRecipients: composeForm.bccRecipients });
                             setComposingType(null);
-                            setComposeForm({ email: '', subject: '', body: '', mobile: '', template: '' });
+                            setComposeForm({ email: '', subject: '', body: '', ccRecipients: '', bccRecipients: '', mobile: '', template: '' });
                           }}
                           disabled={sending}
                         >
