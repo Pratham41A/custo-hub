@@ -177,7 +177,7 @@ export default function InboxPage() {
       clearTimeout(replyDraftTimeoutRef.current);
     }
 
-    // Set new timeout for debounced save (save after 2 seconds of inactivity)
+    // Set new timeout for debounced save (save after 1 second of inactivity)
     replyDraftTimeoutRef.current = setTimeout(async () => {
       try {
         const message = inboxMessages.find(m => m._id === replyingToId);
@@ -196,7 +196,7 @@ export default function InboxPage() {
       } catch (error) {
         console.error('❌ Failed to save reply draft:', error);
       }
-    }, 2000);
+    }, 1000);
 
     // Cleanup timeout on component unmount
     return () => {
