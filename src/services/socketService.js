@@ -1,5 +1,6 @@
 import { io } from 'socket.io-client';
-import { useGlobalStore } from '../store/globalStore';
+// For socket events we interact with the redux store directly
+import { store, handleInboxUpdated, handleInboxCreated } from '../store/globalStore';
 
 const SOCKET_URL = 'https://sadmin-api.onference.in';
 
@@ -104,34 +105,24 @@ class SocketService {
       this.playNotificationSound();
       this.showNotificationAlert('New Inbox', `New message received`);
       
-      const store = useGlobalStore.getState();
+      const state = store.getState().global;
       if (data && data._id) {
-        // Check if inbox exists in state - update or add
-        const existingInbox = store.inboxes.find(i => i._id === data._id);
-        
-        // Prepare inbox data - merge with defaults for missing fields
+        const existingInbox = state.inboxes.find(i => i._id === data._id);
         let inboxData = {
           ...data,
           status: data.status || 'unread',
           inboxDateTime: data.inboxDateTime || data.updatedAt || new Date().toISOString(),
         };
-        
-        // If dummyOwner is just an ID (string), try to get it from existing inbox
         if (typeof inboxData.dummyOwner === 'string' && existingInbox?.dummyOwner && typeof existingInbox.dummyOwner === 'object') {
           inboxData.dummyOwner = existingInbox.dummyOwner;
         }
-        
-        // If owner is just an ID (string), try to get it from existing inbox
         if (typeof inboxData.owner === 'string' && existingInbox?.owner && typeof existingInbox.owner === 'object') {
           inboxData.owner = existingInbox.owner;
         }
-        
         if (existingInbox) {
-          // Update existing inbox with all received data
-          store.handleInboxUpdated(inboxData);
+          store.dispatch(handleInboxUpdated(inboxData));
         } else {
-          // Add new inbox with all received data
-          store.handleInboxCreated(inboxData);
+          store.dispatch(handleInboxCreated(inboxData));
         }
       }
     });

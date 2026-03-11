@@ -1,12 +1,14 @@
-import { create } from 'zustand';
+import { configureStore, createSlice } from '@reduxjs/toolkit';
+import { useSelector, useDispatch } from 'react-redux';
 import { apiService } from '../services/apiService';
 
-export const useGlobalStore = create((set, get) => ({
+// initial state mirrors the previous zustand store
+const initialState = {
   // Data
   subscriptions: [],
   payments: [],
   inboxes: [],
-    allInboxes: [],
+  allInboxes: [],
   whatsappTemplates: [],
   // Map of inboxId -> resolutions array
   resolutionsByInbox: {},
@@ -15,7 +17,7 @@ export const useGlobalStore = create((set, get) => ({
   notes: [],
   queryTypes: [],
   dashboardData: null,
-  
+
   // Loading states
   loading: {
     inboxes: false,
@@ -23,7 +25,7 @@ export const useGlobalStore = create((set, get) => ({
     dashboard: false,
     userDetails: false,
   },
-  
+
   // UI State
   selectedInbox: null,
   activeFilter: 'all',
@@ -31,530 +33,523 @@ export const useGlobalStore = create((set, get) => ({
   pagination: { skip: 0, limit: 20 },
   // Global toast notification
   toast: { text: '', type: '' },
-  showToast: (text, type = 'info', duration = 3000) => {
-    set({ toast: { text, type } });
-    try {
-      setTimeout(() => set({ toast: { text: '', type: '' } }), duration);
-    } catch (e) { /* ignore */ }
-  },
-  
-  // Loading setters
-  setLoading: (key, value) => set((state) => ({
-    loading: { ...state.loading, [key]: value }
-  })),
-  
-  // Setters
-  setSubscriptions: (subscriptions) => set({ subscriptions }),
-  setPayments: (payments) => set({ payments }),
-  setInboxes: (inboxes) => set({ inboxes }),
-    setAllInboxes: (allInboxes) => set({ allInboxes }),
-  setMessages: (messages) => set({ messages }),
-  setViews: (views) => set({ views }),
-  setNotes: (notes) => set({ notes }),
-  setQueryTypes: (queryTypes) => set({ queryTypes }),
-  setWhatsappTemplates: (templates) => set({ whatsappTemplates: templates }),
-  setResolutionsForInbox: (inboxId, resolutions) => set((state) => ({
-    resolutionsByInbox: { ...state.resolutionsByInbox, [inboxId]: resolutions }
-  })),
-  setDashboardData: (dashboardData) => set({ dashboardData }),
-  
-  setSelectedInbox: (inbox) => set({ selectedInbox: inbox }),
-  setActiveFilter: (filter) => set({ activeFilter: filter }),
-  setDateRange: (range) => set({ dateRange: range }),
-  setPagination: (pagination) => set({ pagination }),
-  
-  // API Actions
-  fetchDashboard: async (options = {}) => {
-    const { setLoading, setDashboardData, dateRange } = get();
-    setLoading('dashboard', true);
-    try {
-      const params = {
-        startDate: options.startDate ?? dateRange.start ?? '',
-        endDate: options.endDate ?? dateRange.end ?? '',
-      };
-      const data = await apiService.getDashboards(params);
-      setDashboardData(data);
-      return data;
-    } catch (error) {
-      console.error('Failed to fetch dashboard:', error);
-      throw error;
-    } finally {
-      setLoading('dashboard', false);
-    }
-  },
+};
 
-  fetchInboxes: async (options = {}) => {
-      const { setLoading, setInboxes, setAllInboxes, activeFilter, dateRange, pagination, allInboxes } = get();
-      setLoading('inboxes', true);
-      try {
-        const params = {
-          status: options.status ?? (activeFilter === 'all' ? '' : activeFilter),
-          limit: options.limit ?? pagination.limit,
-          skip: options.skip ?? pagination.skip,
-          startDate: options.startDate ?? dateRange.start ?? '',
-          endDate: options.endDate ?? dateRange.end ?? '',
-        };
-
-        // If status filter is provided and we already have cached `allInboxes`,
-        // filter locally to avoid extra API calls (unless forceFetch is true).
-        const wantStatus = params.status;
-        const force = !!options.forceFetch;
-        if (wantStatus && !force && Array.isArray(allInboxes) && allInboxes.length > 0) {
-          const filtered = allInboxes.filter(i => i.status === wantStatus);
-          setInboxes(filtered);
-          return filtered;
-        }
-
-        // If no specific status requested (all), and we have cache and not forcing, use cache
-        if (!wantStatus && !force && Array.isArray(allInboxes) && allInboxes.length > 0) {
-          setInboxes(allInboxes);
-          return allInboxes;
-        }
-
-        // Otherwise fetch from API
-        const data = await apiService.getInboxes(params);
-        // Extract array from various response formats
-        let inboxList = [];
-        if (Array.isArray(data)) {
-          inboxList = data;
-        } else if (data?.inboxes && Array.isArray(data.inboxes)) {
-          inboxList = data.inboxes;
-        } else if (data?.data && Array.isArray(data.data)) {
-          inboxList = data.data;
-        }
-
-        // Cache the full list when requesting all
-        if (!wantStatus) {
-          setAllInboxes(inboxList);
-        }
-        setInboxes(inboxList);
-          // Notify success quietly
-          try { get().showToast && get().showToast('Inboxes loaded', 'success', 1500); } catch(e){}
-        return inboxList;
-      } catch (error) {
-        console.error('Failed to fetch inboxes:', error);
-          try { get().showToast && get().showToast('Failed to fetch inboxes', 'error'); } catch(e){}
-          throw error;
-      } finally {
-        setLoading('inboxes', false);
+const globalSlice = createSlice({
+  name: 'global',
+  initialState,
+  reducers: {
+    // basic setters
+    setSubscriptions(state, action) { state.subscriptions = action.payload; },
+    setPayments(state, action) { state.payments = action.payload; },
+    setInboxes(state, action) { state.inboxes = action.payload; },
+    setAllInboxes(state, action) { state.allInboxes = action.payload; },
+    setWhatsappTemplates(state, action) { state.whatsappTemplates = action.payload; },
+    setMessages(state, action) { state.messages = action.payload; },
+    setViews(state, action) { state.views = action.payload; },
+    setNotes(state, action) { state.notes = action.payload; },
+    setQueryTypes(state, action) { state.queryTypes = action.payload; },
+    setDashboardData(state, action) { state.dashboardData = action.payload; },
+    setSelectedInbox(state, action) { state.selectedInbox = action.payload; },
+    setActiveFilter(state, action) { state.activeFilter = action.payload; },
+    setDateRange(state, action) { state.dateRange = action.payload; },
+    setPagination(state, action) { state.pagination = action.payload; },
+    setLoading(state, action) {
+      const { key, value } = action.payload;
+      state.loading[key] = value;
+    },
+    showToast(state, action) { state.toast = action.payload; },
+    setResolutionsForInbox(state, action) {
+      const { inboxId, resolutions } = action.payload;
+      state.resolutionsByInbox[inboxId] = resolutions;
+    },
+    // socket helpers
+    handleInboxUpdated(state, action) {
+      const inbox = action.payload;
+      state.inboxes = state.inboxes.map(i =>
+        i._id === inbox._id ? { ...i, ...inbox } : i
+      );
+      state.allInboxes = state.allInboxes.map(i =>
+        i._id === inbox._id ? { ...i, ...inbox } : i
+      );
+      if (state.selectedInbox?._id === inbox._id) {
+        state.selectedInbox = { ...state.selectedInbox, ...inbox };
       }
+    },
+    handleInboxCreated(state, action) {
+      const inbox = action.payload;
+      const exists = state.inboxes.some(i => i._id === inbox._id);
+      const allExists = state.allInboxes.some(i => i._id === inbox._id);
+      const newInbox = { ...inbox, status: inbox.status || 'unread' };
+      if (!exists) state.inboxes = [newInbox, ...state.inboxes];
+      if (!allExists) state.allInboxes = [newInbox, ...state.allInboxes];
+    },
+    handleMessageCreated(state, action) {
+      const message = action.payload;
+      const exists = state.messages.some(m => m._id === message._id);
+      if (!exists) state.messages = [...state.messages, message];
+    },
   },
+});
 
-  fetchMessages: async (inboxId) => {
-    const { setLoading, setMessages } = get();
-    setLoading('messages', true);
-    try {
-      const data = await apiService.getMessages(inboxId);
-      const messageList = data.messages || data.data || data || [];
-      setMessages(messageList);
-      // small success hint
-      try { get().showToast && get().showToast('Messages loaded', 'success', 1200); } catch(e){}
-      return messageList;
-    } catch (error) {
-      console.error('Failed to fetch messages:', error);
-      setMessages([]); // Clear messages on error
-      try { get().showToast && get().showToast('Failed to fetch messages', 'error'); } catch(e){}
-      throw error;
-    } finally {
-      setLoading('messages', false);
-    }
-  },
+// export actions for use in thunks and socketService
+export const {
+  setSubscriptions,
+  setPayments,
+  setInboxes,
+  setAllInboxes,
+  setWhatsappTemplates,
+  setMessages,
+  setViews,
+  setNotes,
+  setQueryTypes,
+  setDashboardData,
+  setSelectedInbox,
+  setActiveFilter,
+  setDateRange,
+  setPagination,
+  setLoading,
+  showToast,
+  setResolutionsForInbox,
+  handleInboxUpdated,
+  handleInboxCreated,
+  handleMessageCreated,
+} = globalSlice.actions;
 
-  // Inbox Operations
-  updateInboxStatus: async (inboxId, status, queryType = '', resolvedBy = '') => {
-    // Optimistic update: update local state immediately, then sync with API
-    const prevState = get();
-    const prevInbox = Array.isArray(prevState.inboxes)
-      ? prevState.inboxes.find(i => i._id === inboxId)
-      : (prevState.inboxes?.data || []).find(i => i._id === inboxId);
+// configure store
+export const store = configureStore({
+  reducer: { global: globalSlice.reducer },
+});
 
-    // Apply optimistic change to both inboxes and allInboxes
-    set((state) => ({
-      inboxes: state.inboxes.map((inbox) =>
-        inbox._id === inboxId ? { ...inbox, status, ...(queryType ? { queryType } : {}) } : inbox
-      ),
-      allInboxes: state.allInboxes.map((inbox) =>
-        inbox._id === inboxId ? { ...inbox, status, ...(queryType ? { queryType } : {}) } : inbox
-      ),
-      selectedInbox: state.selectedInbox?._id === inboxId
-        ? { ...state.selectedInbox, status, ...(queryType ? { queryType } : {}) }
-        : state.selectedInbox,
-    }));
+// thunk helpers replicate original async methods
 
-    try {
-      const response = await apiService.updateInbox({ inboxId, status, queryType, resolvedBy });
-      const updatedInbox = response || {};
-      // Merge API response (ensure any server-side fields are applied)
-      set((state) => ({
-        inboxes: state.inboxes.map((inbox) =>
-          inbox._id === inboxId ? { ...inbox, ...updatedInbox } : inbox
-        ),
-        allInboxes: state.allInboxes.map((inbox) =>
-          inbox._id === inboxId ? { ...inbox, ...updatedInbox } : inbox
-        ),
-        selectedInbox: state.selectedInbox?._id === inboxId
-          ? { ...state.selectedInbox, ...updatedInbox }
-          : state.selectedInbox,
-      }));
-      try { get().showToast && get().showToast(`Inbox marked ${status}`, 'success', 1800); } catch(e){}
-      return updatedInbox;
-    } catch (error) {
-      // Revert optimistic update on error
-      set((state) => ({
-        inboxes: state.inboxes.map((inbox) =>
-          inbox._id === inboxId ? { ...inbox, ...(prevInbox || {}) } : inbox
-        ),
-        selectedInbox: state.selectedInbox?._id === inboxId
-          ? { ...state.selectedInbox, ...(prevInbox || {}) }
-          : state.selectedInbox,
-      }));
-      try { get().showToast && get().showToast('Failed to update inbox', 'error'); } catch(e){}
-      throw error;
-    }
-  },
+export const fetchDashboard = (options = {}) => async (dispatch, getState) => {
+  dispatch(setLoading({ key: 'dashboard', value: true }));
+  try {
+    const { dateRange } = getState().global;
+    const params = {
+      startDate: options.startDate ?? dateRange.start ?? '',
+      endDate: options.endDate ?? dateRange.end ?? '',
+    };
+    const data = await apiService.getDashboards(params);
+    dispatch(setDashboardData(data));
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch dashboard:', error);
+    throw error;
+  } finally {
+    dispatch(setLoading({ key: 'dashboard', value: false }));
+  }
+};
 
-  // User data fetching - matches API response format
-  fetchUserSubscriptions: async (userId) => {
-    try {
-      const response = await apiService.getSubscriptions(userId);
-      const subs = response.subscriptions || response.data || response || [];
-      set({ subscriptions: subs });
-      return { data: subs };
-    } catch (error) {
-      console.error('Failed to fetch subscriptions:', error);
-      return { data: [] };
-    }
-  },
+export const fetchInboxes = (options = {}) => async (dispatch, getState) => {
+  dispatch(setLoading({ key: 'inboxes', value: true }));
+  try {
+    const state = getState().global;
+    const { activeFilter, dateRange, pagination, allInboxes } = state;
+    const params = {
+      status: options.status ?? (activeFilter === 'all' ? '' : activeFilter),
+      limit: options.limit ?? pagination.limit,
+      skip: options.skip ?? pagination.skip,
+      startDate: options.startDate ?? dateRange.start ?? '',
+      endDate: options.endDate ?? dateRange.end ?? '',
+    };
 
-  fetchUserPayments: async (userId) => {
-    try {
-      const response = await apiService.getPayments(userId);
-      const payments = response.payments || response.data || response || [];
-      set({ payments });
-      return { data: payments };
-    } catch (error) {
-      console.error('Failed to fetch payments:', error);
-      return { data: [] };
-    }
-  },
-
-  fetchUserViews: async (userId) => {
-    try {
-      const response = await apiService.getViews(userId);
-      // API returns { count, videoTracks } structure
-      const viewsData = response.videoTracks || response.views || response.data || response || [];
-      // Ensure views is always an array
-      const views = Array.isArray(viewsData) ? viewsData : [];
-      set({ views });
-      return { data: views };
-    } catch (error) {
-      console.error('Failed to fetch views:', error);
-      return { data: [] };
-    }
-  },
-
-  fetchUserActivities: async (inboxId) => {
-    try {
-      const response = await apiService.getActivities(inboxId);
-      // API returns { count, activities } or activities array directly
-      let notesData = response.activities || response.data || response || [];
-      // Ensure notes is always an array
-      const notes = Array.isArray(notesData) ? notesData : [];
-      set({ notes });
-      return { data: notes };
-    } catch (error) {
-      console.error('Failed to fetch activities:', error);
-      return { data: [] };
-    }
-  },
-
-  // Resolutions - cache per-inbox to avoid repeated API calls
-  fetchResolutions: async (inboxId) => {
-    const { resolutionsByInbox, setResolutionsForInbox } = get();
-    if (!inboxId) return [];
-    // Return cached if present
-    if (resolutionsByInbox && Array.isArray(resolutionsByInbox[inboxId]) && resolutionsByInbox[inboxId].length > 0) {
-      return resolutionsByInbox[inboxId];
-    }
-    try {
-      const response = await apiService.fetchResolutions(inboxId);
-      // API returns { count, resolutions }
-      const list = Array.isArray(response.resolutions) ? response.resolutions : (Array.isArray(response) ? response : []);
-      setResolutionsForInbox(inboxId, list);
-      return list;
-    } catch (error) {
-      console.error('Failed to fetch resolutions:', error);
-      setResolutionsForInbox(inboxId, []);
-      return [];
-    }
-  },
-
-  // Message Operations
-  sendWhatsappTemplate: async (mobile, template) => {
-    try {
-      const result = await apiService.sendWhatsappTemplate(mobile, template);
-      // If API returned a message object, append to messages and update inbox metadata
-      const msg = result?.message || result?.data || result;
-      if (msg && (msg._id || msg.id)) {
-        set((state) => ({ messages: [...state.messages, msg] }));
-        // If inbox id present, update inboxes/selectedInbox updatedAt/status
-        const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
-        if (inboxId) {
-          set((state) => ({
-            inboxes: state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i),
-            selectedInbox: state.selectedInbox?._id === inboxId ? { ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt } : state.selectedInbox,
-          }));
-        }
-      }
-      try { get().showToast && get().showToast('WhatsApp template sent', 'success'); } catch(e){}
-      return result;
-    } catch (error) {
-      console.error('Failed to send WhatsApp template:', error);
-      try { get().showToast && get().showToast('Failed to send WhatsApp template', 'error'); } catch(e){}
-      throw error;
-    }
-  },
-
-  sendWhatsappMessage: async (mobile, body) => {
-    try {
-      const result = await apiService.sendWhatsappMessage(mobile, body);
-      const msg = result?.message || result?.data || result;
-      if (msg && (msg._id || msg.id)) {
-        set((state) => ({ messages: [...state.messages, msg] }));
-        const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
-        if (inboxId) {
-          set((state) => ({
-            inboxes: state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i),
-            selectedInbox: state.selectedInbox?._id === inboxId ? { ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt } : state.selectedInbox,
-          }));
-        }
-      }
-      try { get().showToast && get().showToast('WhatsApp sent', 'success'); } catch(e){}
-      return result;
-    } catch (error) {
-      console.error('Failed to send WhatsApp message:', error);
-      try { get().showToast && get().showToast('Failed to send WhatsApp message', 'error'); } catch(e){}
-      throw error;
-    }
-  },
-
-  sendEmailReply: async (replyMessageId, htmlBody, email) => {
-    try {
-      const result = await apiService.sendEmailReply(replyMessageId, htmlBody, email);
-      const msg = result?.message || result?.data || result;
-      if (msg && (msg._id || msg.id)) {
-        set((state) => ({ messages: [...state.messages, msg] }));
-        const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
-        if (inboxId) {
-          set((state) => ({
-            inboxes: state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i),
-            selectedInbox: state.selectedInbox?._id === inboxId ? { ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt } : state.selectedInbox,
-          }));
-        }
-      }
-      try { get().showToast && get().showToast('Reply sent', 'success'); } catch(e){}
-      return result;
-    } catch (error) {
-      console.error('Failed to send email reply:', error);
-      try { get().showToast && get().showToast('Failed to send reply', 'error'); } catch(e){}
-      throw error;
-    }
-  },
-
-  sendNewEmail: async (email, subject, htmlBody) => {
-    try {
-      const result = await apiService.sendNewEmail(email, subject, htmlBody);
-      const msg = result?.message || result?.data || result;
-      if (msg && (msg._id || msg.id)) {
-        set((state) => ({ messages: [...state.messages, msg] }));
-      }
-      try { get().showToast && get().showToast('Email sent', 'success'); } catch(e){}
-      return result;
-    } catch (error) {
-      console.error('Failed to send new email:', error);
-      try { get().showToast && get().showToast('Failed to send email', 'error'); } catch(e){}
-      throw error;
-    }
-  },
-
-  // Message Operations - Uses existing updateInbox endpoint with messageId
-  updateMessage: async (inboxId, messageId, status, queryType = '', resolvedBy = '') => {
-    try {
-      const result = await apiService.updateInbox({ inboxId, messageId, status, queryType, resolvedBy });
-      // If API returned updated message object, merge it; otherwise apply optimistic fields
-      const updatedMsg = result?.message || result?.data || null;
-      if (updatedMsg && (updatedMsg._id || updatedMsg.id)) {
-        const mid = updatedMsg._id || updatedMsg.id;
-        set((state) => ({
-          messages: state.messages.map((msg) => msg._id === mid ? { ...msg, ...updatedMsg } : msg),
-        }));
-      } else {
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            msg._id === messageId
-              ? { ...msg, status, ...(queryType && { queryType }) }
-              : msg
-          ),
-        }));
-      }
-
-      // If response contains inbox-level updates, merge into inboxes and selectedInbox
-      const inboxUpdate = result?.inbox || result?.updatedInbox || null;
-      const inboxIdFromResp = inboxUpdate?._id || result?.inboxId || inboxId;
-      if (inboxUpdate || result?.inboxId) {
-        set((state) => ({
-          inboxes: state.inboxes.map((i) => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i),
-          allInboxes: state.allInboxes.map((i) => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i),
-          selectedInbox: state.selectedInbox?._id === inboxIdFromResp ? { ...state.selectedInbox, ...(inboxUpdate || {}) } : state.selectedInbox,
-        }));
-      }
-
-      try { get().showToast && get().showToast('Message updated', 'success', 1400); } catch(e){}
-
-      return result;
-    } catch (error) {
-      console.error('Failed to update message:', error);
-      try { get().showToast && get().showToast('Failed to update message', 'error'); } catch(e){}
-      throw error;
-    }
-  },
-
-  // Note Operations
-  createNote: async (inboxId, body, dueDate) => {
-    try {
-      const result = await apiService.createActivity(inboxId, body, dueDate);
-      set((state) => ({
-        notes: [...state.notes, result],
-      }));
-      return result;
-    } catch (error) {
-      console.error('Failed to create note:', error);
-      throw error;
-    }
-  },
-
-  // Fetch Query Types
-  fetchQueryTypes: async () => {
-    try {
-      const response = await apiService.fetchQueryTypes();
-      let queryTypes = [];
-      // Handle response format: { count, queryTypes: [...] }
-      if (response.queryTypes && Array.isArray(response.queryTypes)) {
-        queryTypes = response.queryTypes;
-      } else if (Array.isArray(response)) {
-        queryTypes = response;
-      } else if (response.data && Array.isArray(response.data)) {
-        queryTypes = response.data;
-      }
-      set({ queryTypes });
-      return queryTypes;
-    } catch (error) {
-      console.error('Failed to fetch query types:', error);
-      return [];
-    }
-  },
-
-  // Create Query Type
-  createQueryType: async (name) => {
-    try {
-      const response = await apiService.createQueryType(name);
-      const newQueryType = response.data || response;
-      set((state) => ({
-        queryTypes: [...state.queryTypes, newQueryType],
-      }));
-      return newQueryType;
-    } catch (error) {
-      console.error('Failed to create query type:', error);
-      throw error;
-    }
-  },
-
-  // Fetch WhatsApp Templates
-  fetchWhatsappTemplates: async () => {
-    try {
-      const response = await apiService.fetchWhatsappTemplates();
-      const templates = response.whatsappTemplates || response.templates || response || [];
-      set({ whatsappTemplates: templates });
-      return templates;
-    } catch (error) {
-      console.error('Failed to fetch whatsapp templates:', error);
-      set({ whatsappTemplates: [] });
-      return [];
-    }
-  },
-
-  // Send WhatsApp Template with parameters
-  sendWhatsappTemplateWithParams: async (mobile, template) => {
-    try {
-      const result = await apiService.sendWhatsappTemplateWithParams(mobile, template);
-      const msg = result?.message || result?.data || result;
-      if (msg && (msg._id || msg.id)) {
-        set((state) => ({ messages: [...state.messages, msg] }));
-        const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
-        if (inboxId) {
-          set((state) => ({
-            inboxes: state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i),
-            selectedInbox: state.selectedInbox?._id === inboxId ? { ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt } : state.selectedInbox,
-          }));
-        }
-      }
-      return result;
-    } catch (error) {
-      console.error('Failed to send whatsapp template:', error);
-      throw error;
-    }
-  },
-
-  // Get filtered inboxes based on activeFilter - local filtering without API calls
-  getFilteredInboxes: () => {
-    const { allInboxes, activeFilter } = get();
-    
-    if (!Array.isArray(allInboxes) || allInboxes.length === 0) {
-      return [];
+    const wantStatus = params.status;
+    const force = !!options.forceFetch;
+    if (wantStatus && !force && Array.isArray(allInboxes) && allInboxes.length > 0) {
+      const filtered = allInboxes.filter(i => i.status === wantStatus);
+      dispatch(setInboxes(filtered));
+      return filtered;
     }
 
-    if (activeFilter === 'all') {
-      // Return all inboxes regardless of status
+    if (!wantStatus && !force && Array.isArray(allInboxes) && allInboxes.length > 0) {
+      dispatch(setInboxes(allInboxes));
       return allInboxes;
     }
 
-    // Filter by specific status
-    return allInboxes.filter(inbox => inbox.status === activeFilter);
-  },
+    const data = await apiService.getInboxes(params);
+    let inboxList = [];
+    if (Array.isArray(data)) {
+      inboxList = data;
+    } else if (data?.inboxes && Array.isArray(data.inboxes)) {
+      inboxList = data.inboxes;
+    } else if (data?.data && Array.isArray(data.data)) {
+      inboxList = data.data;
+    }
 
-  // Ensure allInboxes is loaded - call this on app init or when needed
-  ensureAllInboxesLoaded: async () => {
-    const { allInboxes, fetchInboxes } = get();
-    
-    // If we don't have allInboxes cached, fetch them
-    if (!Array.isArray(allInboxes) || allInboxes.length === 0) {
-      try {
-        await fetchInboxes({ status: '', forceFetch: false });
-      } catch (error) {
-        console.error('Failed to ensure all inboxes are loaded:', error);
-        throw error;
+    if (!wantStatus) {
+      dispatch(setAllInboxes(inboxList));
+    }
+    dispatch(setInboxes(inboxList));
+    try { dispatch(showToast({ text: 'Inboxes loaded', type: 'success' })); } catch (e) {}
+    return inboxList;
+  } catch (error) {
+    console.error('Failed to fetch inboxes:', error);
+    try { dispatch(showToast({ text: 'Failed to fetch inboxes', type: 'error' })); } catch (e) {}
+    throw error;
+  } finally {
+    dispatch(setLoading({ key: 'inboxes', value: false }));
+  }
+};
+
+export const fetchMessages = (inboxId) => async (dispatch) => {
+  dispatch(setLoading({ key: 'messages', value: true }));
+  try {
+    const data = await apiService.getMessages(inboxId);
+    const messageList = data.messages || data.data || data || [];
+    dispatch(setMessages(messageList));
+    try { dispatch(showToast({ text: 'Messages loaded', type: 'success' })); } catch (e) {}
+    return messageList;
+  } catch (error) {
+    console.error('Failed to fetch messages:', error);
+    dispatch(setMessages([]));
+    try { dispatch(showToast({ text: 'Failed to fetch messages', type: 'error' })); } catch (e) {}
+    throw error;
+  } finally {
+    dispatch(setLoading({ key: 'messages', value: false }));
+  }
+};
+
+export const updateInboxStatus = (inboxId, status, queryType = '', resolvedBy = '') => async (dispatch, getState) => {
+  const state = getState().global;
+  const prevInbox = Array.isArray(state.inboxes)
+    ? state.inboxes.find(i => i._id === inboxId)
+    : (state.inboxes?.data || []).find(i => i._id === inboxId);
+
+  const updatedInboxes = state.inboxes.map(i =>
+    i._id === inboxId ? { ...i, status, ...(queryType ? { queryType } : {}) } : i
+  );
+  const updatedAll = state.allInboxes.map(i =>
+    i._id === inboxId ? { ...i, status, ...(queryType ? { queryType } : {}) } : i
+  );
+  const updatedSelected = state.selectedInbox?._id === inboxId
+    ? { ...state.selectedInbox, status, ...(queryType ? { queryType } : {}) }
+    : state.selectedInbox;
+  dispatch(setInboxes(updatedInboxes));
+  dispatch(setAllInboxes(updatedAll));
+  dispatch(setSelectedInbox(updatedSelected));
+
+  try {
+    const response = await apiService.updateInbox({ inboxId, status, queryType, resolvedBy });
+    const updatedInbox = response || {};
+    dispatch(setInboxes(state.inboxes.map(i => i._id === inboxId ? { ...i, ...updatedInbox } : i)));
+    dispatch(setAllInboxes(state.allInboxes.map(i => i._id === inboxId ? { ...i, ...updatedInbox } : i)));
+    if (state.selectedInbox?._id === inboxId) {
+      dispatch(setSelectedInbox({ ...state.selectedInbox, ...updatedInbox }));
+    }
+    try { dispatch(showToast({ text: `Inbox marked ${status}`, type: 'success' })); } catch (e) {}
+    return updatedInbox;
+  } catch (error) {
+    dispatch(setInboxes(state.inboxes.map(i => i._id === inboxId ? { ...i, ...(prevInbox || {}) } : i)));
+    if (state.selectedInbox?._id === inboxId) {
+      dispatch(setSelectedInbox({ ...state.selectedInbox, ...(prevInbox || {}) }));
+    }
+    try { dispatch(showToast({ text: 'Failed to update inbox', type: 'error' })); } catch (e) {}
+    throw error;
+  }
+};
+
+export const fetchUserSubscriptions = (userId) => async (dispatch) => {
+  try {
+    const response = await apiService.getSubscriptions(userId);
+    const subs = response.subscriptions || response.data || response || [];
+    dispatch(setSubscriptions(subs));
+    return { data: subs };
+  } catch (error) {
+    console.error('Failed to fetch subscriptions:', error);
+    return { data: [] };
+  }
+};
+
+export const fetchUserPayments = (userId) => async (dispatch) => {
+  try {
+    const response = await apiService.getPayments(userId);
+    const payments = response.payments || response.data || response || [];
+    dispatch(setPayments(payments));
+    return { data: payments };
+  } catch (error) {
+    console.error('Failed to fetch payments:', error);
+    return { data: [] };
+  }
+};
+
+export const fetchUserViews = (userId) => async (dispatch) => {
+  try {
+    const response = await apiService.getViews(userId);
+    const viewsData = response.videoTracks || response.views || response.data || response || [];
+    const views = Array.isArray(viewsData) ? viewsData : [];
+    dispatch(setViews(views));
+    return { data: views };
+  } catch (error) {
+    console.error('Failed to fetch views:', error);
+    return { data: [] };
+  }
+};
+
+export const fetchUserActivities = (inboxId) => async (dispatch) => {
+  try {
+    const response = await apiService.getActivities(inboxId);
+    let notesData = response.activities || response.data || response || [];
+    const notes = Array.isArray(notesData) ? notesData : [];
+    dispatch(setNotes(notes));
+    return { data: notes };
+  } catch (error) {
+    console.error('Failed to fetch activities:', error);
+    return { data: [] };
+  }
+};
+
+export const fetchResolutions = (inboxId) => async (dispatch, getState) => {
+  if (!inboxId) return [];
+  const state = getState().global;
+  if (state.resolutionsByInbox[inboxId] && Array.isArray(state.resolutionsByInbox[inboxId]) && state.resolutionsByInbox[inboxId].length > 0) {
+    return state.resolutionsByInbox[inboxId];
+  }
+  try {
+    const response = await apiService.fetchResolutions(inboxId);
+    const list = Array.isArray(response.resolutions) ? response.resolutions : (Array.isArray(response) ? response : []);
+    dispatch(setResolutionsForInbox({ inboxId, resolutions: list }));
+    return list;
+  } catch (error) {
+    console.error('Failed to fetch resolutions:', error);
+    dispatch(setResolutionsForInbox({ inboxId, resolutions: [] }));
+    return [];
+  }
+};
+
+export const sendWhatsappTemplate = (mobile, template) => async (dispatch, getState) => {
+  try {
+    const result = await apiService.sendWhatsappTemplate(mobile, template);
+    const msg = result?.message || result?.data || result;
+    if (msg && (msg._id || msg.id)) {
+      const state = getState().global;
+      dispatch(setMessages([...state.messages, msg]));
+      const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
+      if (inboxId) {
+        const inboxes = state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        const allInboxes = state.allInboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        dispatch(setInboxes(inboxes));
+        dispatch(setAllInboxes(allInboxes));
+        if (state.selectedInbox?._id === inboxId) {
+          dispatch(setSelectedInbox({ ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt }));
+        }
       }
     }
-  },
-  
-  // Dashboard Stats - matches API response format
-  getDashboardStats: () => {
-    const { dashboardData } = get();
-    
+    try { dispatch(showToast({ text: 'WhatsApp template sent', type: 'success' })); } catch(e){}
+    return result;
+  } catch (error) {
+    console.error('Failed to send WhatsApp template:', error);
+    try { dispatch(showToast({ text: 'Failed to send WhatsApp template', type: 'error' })); } catch(e){}
+    throw error;
+  }
+};
+
+export const sendWhatsappMessage = (mobile, body) => async (dispatch, getState) => {
+  try {
+    const result = await apiService.sendWhatsappMessage(mobile, body);
+    const msg = result?.message || result?.data || result;
+    if (msg && (msg._id || msg.id)) {
+      const state = getState().global;
+      dispatch(setMessages([...state.messages, msg]));
+      const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
+      if (inboxId) {
+        const inboxes = state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        const allInboxes = state.allInboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        dispatch(setInboxes(inboxes));
+        dispatch(setAllInboxes(allInboxes));
+        if (state.selectedInbox?._id === inboxId) {
+          dispatch(setSelectedInbox({ ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt }));
+        }
+      }
+    }
+    try { dispatch(showToast({ text: 'WhatsApp sent', type: 'success' })); } catch(e){}
+    return result;
+  } catch (error) {
+    console.error('Failed to send WhatsApp message:', error);
+    try { dispatch(showToast({ text: 'Failed to send WhatsApp message', type: 'error' })); } catch(e){}
+    throw error;
+  }
+};
+
+export const sendEmailReply = (replyMessageId, htmlBody, email) => async (dispatch, getState) => {
+  try {
+    const result = await apiService.sendEmailReply(replyMessageId, htmlBody, email);
+    const msg = result?.message || result?.data || result;
+    if (msg && (msg._id || msg.id)) {
+      const state = getState().global;
+      dispatch(setMessages([...state.messages, msg]));
+      const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
+      if (inboxId) {
+        const inboxes = state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        const allInboxes = state.allInboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        dispatch(setInboxes(inboxes));
+        dispatch(setAllInboxes(allInboxes));
+        if (state.selectedInbox?._id === inboxId) {
+          dispatch(setSelectedInbox({ ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt }));
+        }
+      }
+    }
+    try { dispatch(showToast({ text: 'Reply sent', type: 'success' })); } catch(e){}
+    return result;
+  } catch (error) {
+    console.error('Failed to send email reply:', error);
+    try { dispatch(showToast({ text: 'Failed to send reply', type: 'error' })); } catch(e){}
+    throw error;
+  }
+};
+
+export const sendNewEmail = (email, subject, htmlBody) => async (dispatch, getState) => {
+  try {
+    const result = await apiService.sendNewEmail(email, subject, htmlBody);
+    const msg = result?.message || result?.data || result;
+    if (msg && (msg._id || msg.id)) {
+      const state = getState().global;
+      dispatch(setMessages([...state.messages, msg]));
+    }
+    try { dispatch(showToast({ text: 'Email sent', type: 'success' })); } catch(e){}
+    return result;
+  } catch (error) {
+    console.error('Failed to send new email:', error);
+    try { dispatch(showToast({ text: 'Failed to send email', type: 'error' })); } catch(e){}
+    throw error;
+  }
+};
+
+export const updateMessage = (inboxId, messageId, status, queryType = '', resolvedBy = '') => async (dispatch, getState) => {
+  try {
+    const state = getState().global;
+    const result = await apiService.updateInbox({ inboxId, messageId, status, queryType, resolvedBy });
+    const updatedMsg = result?.message || result?.data || null;
+    if (updatedMsg && (updatedMsg._id || updatedMsg.id)) {
+      const mid = updatedMsg._id || updatedMsg.id;
+      dispatch(setMessages(state.messages.map(msg => msg._id === mid ? { ...msg, ...updatedMsg } : msg)));
+    } else {
+      dispatch(setMessages(state.messages.map(msg =>
+        msg._id === messageId
+          ? { ...msg, status, ...(queryType && { queryType }) }
+          : msg
+      )));
+    }
+    const inboxUpdate = result?.inbox || result?.updatedInbox || null;
+    const inboxIdFromResp = inboxUpdate?._id || result?.inboxId || inboxId;
+    if (inboxUpdate || result?.inboxId) {
+      dispatch(setInboxes(state.inboxes.map(i => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i)));
+      dispatch(setAllInboxes(state.allInboxes.map(i => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i)));
+      if (state.selectedInbox?._id === inboxIdFromResp) {
+        dispatch(setSelectedInbox({ ...state.selectedInbox, ...(inboxUpdate || {}) }));
+      }
+    }
+    try { dispatch(showToast({ text: 'Message updated', type: 'success' })); } catch(e){}
+    return result;
+  } catch (error) {
+    console.error('Failed to update message:', error);
+    try { dispatch(showToast({ text: 'Failed to update message', type: 'error' })); } catch(e){}
+    throw error;
+  }
+};
+
+export const createNote = (inboxId, body, dueDate) => async (dispatch, getState) => {
+  try {
+    const result = await apiService.createActivity(inboxId, body, dueDate);
+    const state = getState().global;
+    dispatch(setNotes([...state.notes, result]));
+    return result;
+  } catch (error) {
+    console.error('Failed to create note:', error);
+    throw error;
+  }
+};
+
+export const fetchQueryTypes = () => async (dispatch) => {
+  try {
+    const response = await apiService.fetchQueryTypes();
+    let queryTypes = [];
+    if (response.queryTypes && Array.isArray(response.queryTypes)) {
+      queryTypes = response.queryTypes;
+    } else if (Array.isArray(response)) {
+      queryTypes = response;
+    } else if (response.data && Array.isArray(response.data)) {
+      queryTypes = response.data;
+    }
+    dispatch(setQueryTypes(queryTypes));
+    return queryTypes;
+  } catch (error) {
+    console.error('Failed to fetch query types:', error);
+    return [];
+  }
+};
+
+export const createQueryType = (name) => async (dispatch, getState) => {
+  try {
+    const response = await apiService.createQueryType(name);
+    const newQueryType = response.data || response;
+    const state = getState().global;
+    dispatch(setQueryTypes([...state.queryTypes, newQueryType]));
+    return newQueryType;
+  } catch (error) {
+    console.error('Failed to create query type:', error);
+    throw error;
+  }
+};
+
+export const fetchWhatsappTemplates = () => async (dispatch) => {
+  try {
+    const response = await apiService.fetchWhatsappTemplates();
+    const templates = response.whatsappTemplates || response.templates || response || [];
+    dispatch(setWhatsappTemplates(templates));
+    return templates;
+  } catch (error) {
+    console.error('Failed to fetch whatsapp templates:', error);
+    dispatch(setWhatsappTemplates([]));
+    return [];
+  }
+};
+
+export const sendWhatsappTemplateWithParams = (mobile, template) => async (dispatch, getState) => {
+  try {
+    const result = await apiService.sendWhatsappTemplateWithParams(mobile, template);
+    const msg = result?.message || result?.data || result;
+    if (msg && (msg._id || msg.id)) {
+      const state = getState().global;
+      dispatch(setMessages([...state.messages, msg]));
+      const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
+      if (inboxId) {
+        const inboxes = state.inboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        const allInboxes = state.allInboxes.map(i => i._id === inboxId ? { ...i, ...(msg.inbox || {}), updatedAt: msg.updatedAt || i.updatedAt } : i);
+        dispatch(setInboxes(inboxes));
+        dispatch(setAllInboxes(allInboxes));
+        if (state.selectedInbox?._id === inboxId) {
+          dispatch(setSelectedInbox({ ...state.selectedInbox, ...(msg.inbox || {}), updatedAt: msg.updatedAt || state.selectedInbox.updatedAt }));
+        }
+      }
+    }
+    return result;
+  } catch (error) {
+    console.error('Failed to send whatsapp template:', error);
+    throw error;
+  }
+};
+
+// selectors implemented as functions produced inside hook
+
+// custom hook to use in components
+export const useGlobalStore = (selector) => {
+  const dispatch = useDispatch();
+  const state = useSelector(s => s.global);
+
+  // computed helpers that depend on current state
+  const getDashboardStats = () => {
+    const { dashboardData } = state;
     if (dashboardData) {
       const statusKeys = ['unread', 'read', 'resolved'];
       const channelKeys = ['whatsapp', 'email', 'web'];
-      
-      // Extract channels
       const channels = channelKeys
         .filter(key => dashboardData[key] !== undefined)
         .map(key => ({ _id: key, count: dashboardData[key] || 0 }));
-      
-      // Extract query types (everything else that is not status or channel)
       const queryTypes = Object.keys(dashboardData)
         .filter(key => !statusKeys.includes(key) && !channelKeys.includes(key))
         .map(key => ({ _id: key, count: dashboardData[key] || 0 }));
-      
       return {
         unread: dashboardData.unread || 0,
         read: dashboardData.read || 0,
@@ -563,54 +558,69 @@ export const useGlobalStore = create((set, get) => ({
         queryTypes,
       };
     }
-    
-    return {
-      unread: 0,
-      read: 0,
-      resolved: 0,
-      channels: [],
-      queryTypes: [],
-    };
-  },
-  
-  // Socket Event Handlers
-  handleInboxUpdated: (inbox) => set((state) => {
-    return {
-      inboxes: state.inboxes.map((i) => 
-        i._id === inbox._id 
-          ? { ...i, ...inbox }
-          : i
-      ),
-      allInboxes: state.allInboxes.map((i) => 
-        i._id === inbox._id 
-          ? { ...i, ...inbox }
-          : i
-      ),
-      selectedInbox: state.selectedInbox?._id === inbox._id 
-        ? { ...state.selectedInbox, ...inbox }
-        : state.selectedInbox,
-    };
-  }),
-  
-  handleInboxCreated: (inbox) => set((state) => {
-    const exists = state.inboxes.some(i => i._id === inbox._id);
-    const allInboxesExists = state.allInboxes.some(i => i._id === inbox._id);
-    // Ensure new inboxes have status set to 'unread' by default
-    const newInbox = {
-      ...inbox,
-      status: inbox.status || 'unread',
-    };
-    return {
-      inboxes: exists ? state.inboxes : [newInbox, ...state.inboxes],
-      allInboxes: allInboxesExists ? state.allInboxes : [newInbox, ...state.allInboxes],
-    };
-  }),
-  
-  handleMessageCreated: (message) => set((state) => {
-    const exists = state.messages.some(m => m._id === message._id);
-    if (exists) return state;
-    return {
-      messages: [...state.messages, message],
-    };
-  }),
-}));
+    return { unread: 0, read: 0, resolved: 0, channels: [], queryTypes: [] };
+  };
+
+  const getFilteredInboxes = () => {
+    const { allInboxes, activeFilter } = state;
+    if (!Array.isArray(allInboxes) || allInboxes.length === 0) return [];
+    if (activeFilter === 'all') return allInboxes;
+    return allInboxes.filter(inbox => inbox.status === activeFilter);
+  };
+
+  const ensureAllInboxesLoaded = async () => {
+    if (!Array.isArray(state.allInboxes) || state.allInboxes.length === 0) {
+      return dispatch(fetchInboxes({ status: '', forceFetch: false }));
+    }
+  };
+
+  const actions = {
+    showToast: (text, type = 'info', duration = 3000) => {
+      dispatch(showToast({ text, type }));
+      try {
+        setTimeout(() => dispatch(showToast({ text: '', type: '' })), duration);
+      } catch (e) {}
+    },
+    setLoading: (key, value) => dispatch(setLoading({ key, value })),
+    setSubscriptions: (v) => dispatch(setSubscriptions(v)),
+    setPayments: (v) => dispatch(setPayments(v)),
+    setInboxes: (v) => dispatch(setInboxes(v)),
+    setAllInboxes: (v) => dispatch(setAllInboxes(v)),
+    setMessages: (v) => dispatch(setMessages(v)),
+    setViews: (v) => dispatch(setViews(v)),
+    setNotes: (v) => dispatch(setNotes(v)),
+    setQueryTypes: (v) => dispatch(setQueryTypes(v)),
+    setWhatsappTemplates: (v) => dispatch(setWhatsappTemplates(v)),
+    setResolutionsForInbox: (id, res) => dispatch(setResolutionsForInbox({ inboxId: id, resolutions: res })),
+    setDashboardData: (v) => dispatch(setDashboardData(v)),
+    setSelectedInbox: (v) => dispatch(setSelectedInbox(v)),
+    setActiveFilter: (v) => dispatch(setActiveFilter(v)),
+    setDateRange: (v) => dispatch(setDateRange(v)),
+    setPagination: (v) => dispatch(setPagination(v)),
+    fetchDashboard: (opts) => dispatch(fetchDashboard(opts)),
+    fetchInboxes: (opts) => dispatch(fetchInboxes(opts)),
+    fetchMessages: (id) => dispatch(fetchMessages(id)),
+    updateInboxStatus: (id, status, qt, rb) => dispatch(updateInboxStatus(id, status, qt, rb)),
+    fetchUserSubscriptions: (u) => dispatch(fetchUserSubscriptions(u)),
+    fetchUserPayments: (u) => dispatch(fetchUserPayments(u)),
+    fetchUserViews: (u) => dispatch(fetchUserViews(u)),
+    fetchUserActivities: (i) => dispatch(fetchUserActivities(i)),
+    fetchResolutions: (i) => dispatch(fetchResolutions(i)),
+    sendWhatsappTemplate: (m, t) => dispatch(sendWhatsappTemplate(m, t)),
+    sendWhatsappMessage: (m, b) => dispatch(sendWhatsappMessage(m, b)),
+    sendEmailReply: (r, h, e) => dispatch(sendEmailReply(r, h, e)),
+    sendNewEmail: (e, s, h) => dispatch(sendNewEmail(e, s, h)),
+    createNote: (i, b, d) => dispatch(createNote(i, b, d)),
+    fetchQueryTypes: () => dispatch(fetchQueryTypes()),
+    createQueryType: (n) => dispatch(createQueryType(n)),
+    fetchWhatsappTemplates: () => dispatch(fetchWhatsappTemplates()),
+    sendWhatsappTemplateWithParams: (m, t) => dispatch(sendWhatsappTemplateWithParams(m, t)),
+    updateMessage: (i, m, s, q, r) => dispatch(updateMessage(i, m, s, q, r)),
+    getDashboardStats,
+    getFilteredInboxes,
+    ensureAllInboxesLoaded,
+  };
+
+  const combined = { ...state, ...actions };
+  return selector ? selector(combined) : combined;
+};
