@@ -205,14 +205,24 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
     const data = await apiService.getMessages(inboxId);
     let messageList = data.messages || data.data || data || [];
     
-    // Process draft messages: extract content.value for messages with isDraft: true
+    // Process draft messages: extract content and parse JSON if needed
     messageList = messageList.map(msg => {
-      if (msg.isDraft && msg.content?.value) {
-        // For draft messages, move the content.value to the body/content field for display
+      if (msg.isDraft && msg.content) {
+        // Try to parse content as JSON (it might be a stringified draft object)
+        let parsedContent = msg.content;
+        try {
+          const parsed = JSON.parse(msg.content);
+          if (parsed && typeof parsed === 'object') {
+            parsedContent = parsed;
+          }
+        } catch (e) {
+          // Not JSON, keep as is
+        }
+        
         return {
           ...msg,
-          body: msg.content.value,
-          content: msg.content.value,
+          body: typeof parsedContent === 'object' ? parsedContent.body : parsedContent,
+          content: parsedContent,
         };
       }
       return msg;

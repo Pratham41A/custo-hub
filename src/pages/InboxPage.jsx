@@ -169,8 +169,13 @@ export default function InboxPage() {
 
   // Auto-save reply draft messages to database when user types
   useEffect(() => {
-    // Only save if there's a reply body and we're actively replying
-    if (!replyingToId || !selectedInbox?._id || !replyForm.body) return;
+    // Only save if we're actively replying and have at least some content (body, TO, CC, or BCC)
+    if (!replyingToId || !selectedInbox?._id) return;
+    
+    const hasContent = replyForm.body || replyForm.toRecipients || replyForm.ccRecipients || replyForm.bccRecipients;
+    if (!hasContent) return;
+
+    console.log('💬 Reply form changed, will auto-save after 1 second');
 
     // Clear previous timeout
     if (replyDraftTimeoutRef.current) {
@@ -183,16 +188,38 @@ export default function InboxPage() {
         const message = inboxMessages.find(m => m._id === replyingToId);
         const source = message?.source === 'whatsapp' ? 'whatsapp' : 'email';
         
+        // Create a comprehensive draft object containing all reply form data
+        const draftData = {
+          body: replyForm.body,
+          toRecipients: replyForm.toRecipients || '',
+          ccRecipients: replyForm.ccRecipients || '',
+          bccRecipients: replyForm.bccRecipients || '',
+          template: replyForm.template || '',
+          source: source
+        };
+        
+        // Stringify the entire object to store as message
+        const messageToDraft = JSON.stringify(draftData);
+        
         // Determine contentType based on the message content
         const contentType = replyForm.body.includes('<') ? 'html' : 'normal';
         
-        console.log(`💾 Saving ${source} reply draft for inbox: ${selectedInbox._id}`);
-        await apiService.saveDraft(
+        console.log(`🌐 API CALL: POST /draft`, {
+          inboxId: selectedInbox._id,
+          message: messageToDraft,
+          contentType: contentType,
+          source: source,
+          draftData: draftData
+        });
+        
+        const response = await apiService.saveDraft(
           selectedInbox._id,
-          replyForm.body,
+          messageToDraft,
           contentType,
           source
         );
+        
+        console.log('✅ Draft saved successfully:', response);
       } catch (error) {
         console.error('❌ Failed to save reply draft:', error);
       }
@@ -204,7 +231,7 @@ export default function InboxPage() {
         clearTimeout(replyDraftTimeoutRef.current);
       }
     };
-  }, [replyForm.body, replyingToId, selectedInbox?._id]);
+  }, [replyForm.body, replyForm.toRecipients, replyForm.ccRecipients, replyForm.bccRecipients, replyForm.template, replyingToId, selectedInbox?._id]);
 
   // Helper: resolve and format mobile number with country code from multiple possible locations
   // Returns concatenated countrycode + mobileno (e.g., "+919920292920" or "919920292920")
@@ -567,9 +594,8 @@ export default function InboxPage() {
 
     console.log('📝 Draft Message Found:', draftMessage);
 
-    // Set reply form body from draft content
-    // Try multiple paths: content.value, content (if string), or body
-    const draftContent = draftMessage?.content?.value || draftMessage?.content || draftMessage?.body;
+    // Try multiple paths to get draft content
+    let draftContent = draftMessage?.content?.value || draftMessage?.content || draftMessage?.body;
     
     console.log('🔍 Checking content paths:', {
       'content.value': draftMessage?.content?.value,
@@ -579,12 +605,30 @@ export default function InboxPage() {
     });
 
     if (draftContent) {
-      console.log('✅ Setting reply form body with:', draftContent);
+      // Try to parse as JSON object (if it's stringified draft data)
+      let draftData = { body: draftContent };
+      
+      try {
+        const parsed = JSON.parse(draftContent);
+        if (parsed && typeof parsed === 'object' && parsed.body !== undefined) {
+          draftData = parsed;
+          console.log('✅ Draft parsed as JSON:', draftData);
+        }
+      } catch (e) {
+        // Not JSON, treat as plain text body
+        console.log('📝 Draft is plain text (not JSON)');
+      }
+      
+      console.log('✅ Setting reply form with draft data:', draftData);
       setReplyForm(prev => {
         console.log('📋 Old replyForm:', prev);
         const updated = {
           ...prev,
-          body: draftContent
+          body: draftData.body || '',
+          toRecipients: draftData.toRecipients || prev.toRecipients || '',
+          ccRecipients: draftData.ccRecipients || '',
+          bccRecipients: draftData.bccRecipients || '',
+          template: draftData.template || ''
         };
         console.log('📋 New replyForm:', updated);
         return updated;
