@@ -182,11 +182,17 @@ export const fetchInboxes = (options = {}) => async (dispatch, getState) => {
       dispatch(setAllInboxes(inboxList));
     }
     dispatch(setInboxes(inboxList));
-    try { dispatch(showToast({ text: 'Inboxes loaded', type: 'success' })); } catch (e) {}
+    try {
+      dispatch(showToast({ text: 'Inboxes loaded', type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch (e) {}
     return inboxList;
   } catch (error) {
     console.error('Failed to fetch inboxes:', error);
-    try { dispatch(showToast({ text: 'Failed to fetch inboxes', type: 'error' })); } catch (e) {}
+    try {
+      dispatch(showToast({ text: 'Failed to fetch inboxes', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch (e) {}
     throw error;
   } finally {
     dispatch(setLoading({ key: 'inboxes', value: false }));
@@ -199,12 +205,18 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
     const data = await apiService.getMessages(inboxId);
     const messageList = data.messages || data.data || data || [];
     dispatch(setMessages(messageList));
-    try { dispatch(showToast({ text: 'Messages loaded', type: 'success' })); } catch (e) {}
+    try {
+      dispatch(showToast({ text: 'Messages loaded', type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch (e) {}
     return messageList;
   } catch (error) {
     console.error('Failed to fetch messages:', error);
     dispatch(setMessages([]));
-    try { dispatch(showToast({ text: 'Failed to fetch messages', type: 'error' })); } catch (e) {}
+    try {
+      dispatch(showToast({ text: 'Failed to fetch messages', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch (e) {}
     throw error;
   } finally {
     dispatch(setLoading({ key: 'messages', value: false }));
@@ -238,14 +250,20 @@ export const updateInboxStatus = (inboxId, status, queryType = '', resolvedBy = 
     if (state.selectedInbox?._id === inboxId) {
       dispatch(setSelectedInbox({ ...state.selectedInbox, ...updatedInbox }));
     }
-    try { dispatch(showToast({ text: `Inbox marked ${status}`, type: 'success' })); } catch (e) {}
+    try {
+      dispatch(showToast({ text: `Inbox marked ${status}`, type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch (e) {}
     return updatedInbox;
   } catch (error) {
     dispatch(setInboxes(state.inboxes.map(i => i._id === inboxId ? { ...i, ...(prevInbox || {}) } : i)));
     if (state.selectedInbox?._id === inboxId) {
       dispatch(setSelectedInbox({ ...state.selectedInbox, ...(prevInbox || {}) }));
     }
-    try { dispatch(showToast({ text: 'Failed to update inbox', type: 'error' })); } catch (e) {}
+    try {
+      dispatch(showToast({ text: 'Failed to update inbox', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch (e) {}
     throw error;
   }
 };
@@ -336,11 +354,17 @@ export const sendWhatsappTemplate = (mobile, template) => async (dispatch, getSt
         }
       }
     }
-    try { dispatch(showToast({ text: 'WhatsApp template sent', type: 'success' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'WhatsApp template sent', type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     return result;
   } catch (error) {
     console.error('Failed to send WhatsApp template:', error);
-    try { dispatch(showToast({ text: 'Failed to send WhatsApp template', type: 'error' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Failed to send WhatsApp template', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     throw error;
   }
 };
@@ -363,11 +387,17 @@ export const sendWhatsappMessage = (mobile, body) => async (dispatch, getState) 
         }
       }
     }
-    try { dispatch(showToast({ text: 'WhatsApp sent', type: 'success' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'WhatsApp sent', type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     return result;
   } catch (error) {
     console.error('Failed to send WhatsApp message:', error);
-    try { dispatch(showToast({ text: 'Failed to send WhatsApp message', type: 'error' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Failed to send WhatsApp message', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     throw error;
   }
 };
@@ -390,11 +420,17 @@ export const sendEmailReply = (replyMessageId, htmlBody, email) => async (dispat
         }
       }
     }
-    try { dispatch(showToast({ text: 'Reply sent', type: 'success' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Reply sent', type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     return result;
   } catch (error) {
     console.error('Failed to send email reply:', error);
-    try { dispatch(showToast({ text: 'Failed to send reply', type: 'error' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Failed to send reply', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     throw error;
   }
 };
@@ -407,11 +443,17 @@ export const sendNewEmail = (email, subject, htmlBody) => async (dispatch, getSt
       const state = getState().global;
       dispatch(setMessages([...state.messages, msg]));
     }
-    try { dispatch(showToast({ text: 'Email sent', type: 'success' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Email sent', type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     return result;
   } catch (error) {
     console.error('Failed to send new email:', error);
-    try { dispatch(showToast({ text: 'Failed to send email', type: 'error' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Failed to send email', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     throw error;
   }
 };
@@ -440,11 +482,17 @@ export const updateMessage = (inboxId, messageId, status, queryType = '', resolv
         dispatch(setSelectedInbox({ ...state.selectedInbox, ...(inboxUpdate || {}) }));
       }
     }
-    try { dispatch(showToast({ text: 'Message updated', type: 'success' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Message updated', type: 'success' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     return result;
   } catch (error) {
     console.error('Failed to update message:', error);
-    try { dispatch(showToast({ text: 'Failed to update message', type: 'error' })); } catch(e){}
+    try {
+      dispatch(showToast({ text: 'Failed to update message', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch(e){}
     throw error;
   }
 };
@@ -575,7 +623,7 @@ export const useGlobalStore = (selector) => {
   };
 
   const actions = {
-    showToast: (text, type = 'info', duration = 3000) => {
+    showToast: (text, type = 'info', duration = 2000) => {
       dispatch(showToast({ text, type }));
       try {
         setTimeout(() => dispatch(showToast({ text: '', type: '' })), duration);
