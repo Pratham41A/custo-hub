@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGlobalStore } from '../store/globalStore';
+import { apiService } from '../services/apiService';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ContextPanel } from '../components/layout/ContextPanel';
 import { EmailEditor } from '../components/EmailEditor';
@@ -79,7 +80,7 @@ export default function InboxPage() {
   const showToast = useGlobalStore(state => state.showToast);
   const [sending, setSending] = useState(false);
   const [replyingToId, setReplyingToId] = useState(null);
-  const [replyForm, setReplyForm] = useState({ body: '', template: '' });
+  const [replyForm, setReplyForm] = useState({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
   const [hoveredInboxId, setHoveredInboxId] = useState(null);
   const [composingType, setComposingType] = useState(null);
   const [composeForm, setComposeForm] = useState({ email: '', subject: '', body: '', ccRecipients: '', bccRecipients: '', mobile: '', template: '' });
@@ -143,6 +144,28 @@ export default function InboxPage() {
     }
   }, [composeForm, selectedInbox?._id, composingType]);
 
+  // Pre-populate TO field with inbox owner email when reply form opens
+  useEffect(() => {
+    if (replyingToId) {
+      const defaultToEmail = selectedInbox?.owner?.email || selectedInbox?.dummyOwner?.email || '';
+      setReplyForm(prev => {
+        // Only update if this is the FIRST time opening (toRecipients is empty)
+        if (!prev.toRecipients && defaultToEmail) {
+          console.log('📧 Pre-populated TO field with:', defaultToEmail);
+          return {
+            ...prev,
+            toRecipients: defaultToEmail
+          };
+        }
+        return prev;
+      });
+    } else {
+      // Clear reply form when reply is closed
+      console.log('🗑️ Clearing reply form');
+      setReplyForm({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
+    }
+  }, [replyingToId, selectedInbox]);
+
   // Helper: resolve and format mobile number with country code from multiple possible locations
   // Returns concatenated countrycode + mobileno (e.g., "+919920292920" or "919920292920")
   const resolveMobile = (inbox, message) => {
@@ -189,7 +212,8 @@ export default function InboxPage() {
   // Reset reply UI when selected inbox changes so reply section re-renders
   useEffect(() => {
     setReplyingToId(null);
-    setReplyForm({ body: '', template: '' });
+    // include all fields so CC/BCC are cleared as well
+    setReplyForm({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
   }, [selectedInbox?._id]);
 
   // Socket.io event listeners for real-time updates
@@ -582,23 +606,17 @@ export default function InboxPage() {
     try {
       const msg = modal.data.replyMessage;
       const isWhatsApp = msg?.source === 'whatsapp';
-      console.log('Reply Debug:', { isWhatsApp, msg, owner: selectedInbox.owner, ownerKeys: Object.keys(selectedInbox.owner || {}) });
       if (isWhatsApp && modal.data.template) {
         const mobile = resolveMobile(selectedInbox, null);
-        console.log('Owner object properties:', selectedInbox.owner);
-        console.log('Sending WhatsApp template reply:', { mobile, template: modal.data.template });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappTemplate(mobile, modal.data.template);
       } else if (isWhatsApp && modal.data.body) {
         const mobile = resolveMobile(selectedInbox, null);
-        console.log('Sending WhatsApp message reply:', { mobile, body: modal.data.body });
         if (!mobile) throw new Error('Mobile number not found');
         await sendWhatsappMessage(mobile, modal.data.body);
       } else if (modal.data.body) {
-        const email = selectedInbox.owner?.email || selectedInbox.owner?.dummyOwner?.name || selectedInbox.dummyOwner?.name;
-        console.log('Sending email reply:', { messageId: msg?.messageId, email });
-        if (!email) throw new Error('Email not found');
-        await sendEmailReply(msg?.messageId, modal.data.body, email);
+        if (!modal.data.toRecipients) throw new Error('To recipient(s) required');
+        await sendEmailReply(msg?.messageId, modal.data.body, modal.data.toRecipients, modal.data.ccRecipients || '', modal.data.bccRecipients || '');
       }
       showToast('Reply sent', 'success');
       closeModal();
@@ -611,28 +629,17 @@ export default function InboxPage() {
   };
 
   const handleInlineReply = async (message, isSendingEmail = false) => {
-    console.log('🔍 handleInlineReply called with:', { message, isSendingEmail, replyForm, selectedInbox: selectedInbox?._id });
     if (!selectedInbox || (!replyForm.body && !replyForm.template)) {
-      console.warn('⚠️ Validation failed:', { selectedInbox: !!selectedInbox, body: replyForm.body, template: replyForm.template });
+      showToast('Please type a message in the reply body', 'error');
       return;
     }
     setSending(true);
     try {
-      console.log('📝 Message object details:', { 
-        messageId: message?._id, 
-        source: message?.source, 
-        isSent: message?.isSent,
-        contentKeys: Object.keys(message || {}).slice(0, 10)
-      });
-      
       const isWhatsApp = message?.source === 'whatsapp';
       const isWeb = message?.source === 'web';
       
-      console.log('📊 Source detection:', { isWhatsApp, isWeb, isSendingEmail });
-      
       if (isWeb) {
         // Send Web Reply - emit socket event
-        console.log('🌐 Sending web reply via socket');
         const socketService = (await import('../services/socketService')).socketService;
         if (socketService.isSocketConnected()) {
           socketService.socket.emit('agent_message', {
@@ -644,36 +651,30 @@ export default function InboxPage() {
         }
       } else if (isSendingEmail || !isWhatsApp) {
         // Send Email Reply
-        console.log('📧 Sending email reply');
-        const email = selectedInbox.owner?.email || selectedInbox.dummyOwner?.email || selectedInbox.dummyOwner?.name || selectedInbox.owner?.dummyOwner?.email;
-        console.log('📧 Email address:', email);
-        if (!email) throw new Error('Email not found');
-        await sendEmailReply(message?.messageId, replyForm.body, email);
+        const toRecipients = replyForm.toRecipients || (selectedInbox.owner?.email || selectedInbox.dummyOwner?.email || selectedInbox.dummyOwner?.name || selectedInbox.owner?.dummyOwner?.email);
+        const ccToSend = replyForm.ccRecipients && replyForm.ccRecipients.trim() ? replyForm.ccRecipients : '';
+        const bccToSend = replyForm.bccRecipients && replyForm.bccRecipients.trim() ? replyForm.bccRecipients : '';
+        if (!toRecipients) throw new Error('To recipient(s) not found');
+        // include BCC now as well
+        const result = await apiService.sendEmailReply(message?.messageId, replyForm.body, toRecipients, ccToSend, bccToSend);
       } else {
         // Send WhatsApp Reply
-        console.log('💬 Sending WhatsApp reply');
         const mobile = resolveMobile(selectedInbox, message);
-        console.log('📱 Mobile number (resolved):', mobile);
         if (!mobile) throw new Error('Mobile number not found');
         
         // Check if current time is past template time
         const timeExpired = isTemplateTimeExpired(selectedInbox.whatsappConversationEndDateTime);
-        console.log('⏰ Template time check:', { endDateTime: selectedInbox.whatsappConversationEndDateTime, timeExpired });
         
         if (timeExpired) {
           // Current time > Template time - send template
-          console.log('📋 Sending template (window expired)');
           if (replyForm.template) {
-            console.log('📤 API call: sendWhatsappTemplate', { mobile, template: replyForm.template });
             await sendWhatsappTemplate(mobile, replyForm.template);
           } else {
             throw new Error('Template name required');
           }
         } else {
           // Current time <= Template time - send direct message
-          console.log('💬 Sending direct message (window active)');
           if (replyForm.body) {
-            console.log('📤 API call: sendWhatsappMessage', { mobile, body: replyForm.body });
             await sendWhatsappMessage(mobile, replyForm.body);
           } else {
             throw new Error('Message body required');
@@ -683,7 +684,7 @@ export default function InboxPage() {
       
       showToast('Reply sent', 'success');
       setReplyingToId(null);
-      setReplyForm({ body: '', template: '' });
+      setReplyForm({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
       await fetchMessages(selectedInbox._id);
     } catch (error) {
       console.error('❌ Inline reply error:', error.message, error);
@@ -1083,7 +1084,7 @@ export default function InboxPage() {
                                 style={buttonStyle('transparent', '#050c18')}
                                 onClick={() => {
                                   setReplyingToId(null);
-                                  setReplyForm({ body: '', template: '' });
+                                  setReplyForm({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
                                 }}
                               >
                                 Cancel
@@ -1138,6 +1139,21 @@ export default function InboxPage() {
                     ) : (
                       <>
                         <div style={{ marginBottom: '12px' }}>
+                          <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
+                          <input type="text" style={inputStyle} placeholder="email@example.com" value={replyForm.toRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, toRecipients: e.target.value })} />
+                        </div>
+                        
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>CC (Optional)</label>
+                          <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={replyForm.ccRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, ccRecipients: e.target.value })} />
+                        </div>
+                        
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>BCC (Optional)</label>
+                          <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={replyForm.bccRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, bccRecipients: e.target.value })} />
+                        </div>
+
+                        <div style={{ marginBottom: '12px' }}>
                           <EmailEditor
                             value={replyForm.body || ''}
                             onChange={(value) => setReplyForm({ ...replyForm, body: value })}
@@ -1149,7 +1165,7 @@ export default function InboxPage() {
                             style={buttonStyle('transparent', '#050c18')}
                             onClick={() => {
                               setReplyingToId(null);
-                              setReplyForm({ body: '', template: '' });
+                              setReplyForm({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
                             }}
                           >
                             Cancel
@@ -1650,7 +1666,19 @@ export default function InboxPage() {
                   <textarea style={textareaStyle} placeholder="Or direct message (within 24h window)" value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
                 </>
               ) : (
-                <textarea style={textareaStyle} value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
+                <>
+                  <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
+                  <input type="text" style={inputStyle} placeholder="email@example.com" value={modal.data.toRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, toRecipients: e.target.value } })} />
+                  
+                  <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block', marginTop: '12px' }}>CC (Optional)</label>
+                  <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={modal.data.ccRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, ccRecipients: e.target.value } })} />
+                  
+                  <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block', marginTop: '12px' }}>BCC (Optional)</label>
+                  <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={modal.data.bccRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, bccRecipients: e.target.value } })} />
+                  
+                  <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block', marginTop: '12px' }}>Message</label>
+                  <textarea style={textareaStyle} value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
+                </>
               )}
             </div>
             <div style={modalFooterStyle}>

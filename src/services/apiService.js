@@ -100,10 +100,21 @@ class ApiService {
   }
 
   // Outlook Reply - POST /outlook/reply
-  async sendEmailReply(replyMessageId, htmlBody, email) {
+  async sendEmailReply(replyMessageId, htmlBody, toRecipients = '', ccRecipients = '', bccRecipients) {
+    // Ensure BCC is properly passed as non-empty string if provided
+    const body = { 
+      replyMessageId, 
+      htmlBody, 
+      toRecipients, 
+      ccRecipients: ccRecipients || ''
+    };
+    // Only include bccRecipients if it's explicitly passed (not undefined)
+    if (bccRecipients !== undefined) {
+      body.bccRecipients = bccRecipients || '';
+    }
     return this.request('/outlook/reply', {
       method: 'POST',
-      body: { replyMessageId, htmlBody, email },
+      body: body,
     });
   }
 

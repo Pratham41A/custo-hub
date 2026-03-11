@@ -402,9 +402,9 @@ export const sendWhatsappMessage = (mobile, body) => async (dispatch, getState) 
   }
 };
 
-export const sendEmailReply = (replyMessageId, htmlBody, email) => async (dispatch, getState) => {
+export const sendEmailReply = (replyMessageId, htmlBody, toRecipients = '', ccRecipients = '', bccRecipients = '') => async (dispatch, getState) => {
   try {
-    const result = await apiService.sendEmailReply(replyMessageId, htmlBody, email);
+    const result = await apiService.sendEmailReply(replyMessageId, htmlBody, toRecipients, ccRecipients, bccRecipients);
     const msg = result?.message || result?.data || result;
     if (msg && (msg._id || msg.id)) {
       const state = getState().global;
@@ -656,7 +656,7 @@ export const useGlobalStore = (selector) => {
     fetchResolutions: (i) => dispatch(fetchResolutions(i)),
     sendWhatsappTemplate: (m, t) => dispatch(sendWhatsappTemplate(m, t)),
     sendWhatsappMessage: (m, b) => dispatch(sendWhatsappMessage(m, b)),
-    sendEmailReply: (r, h, e) => dispatch(sendEmailReply(r, h, e)),
+    sendEmailReply: (r, h, e, cc = '', bcc = '') => dispatch(sendEmailReply(r, h, e, cc, bcc)),
     sendNewEmail: (e, s, h, cc = '', bcc = '') => dispatch(sendNewEmail(e, s, h, cc, bcc)),
     createNote: (i, b, d) => dispatch(createNote(i, b, d)),
     fetchQueryTypes: () => dispatch(fetchQueryTypes()),
