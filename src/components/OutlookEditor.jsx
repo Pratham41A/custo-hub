@@ -1,10 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { EmailEditor } from './EmailEditor';
 
+const STORAGE_KEY = 'email_compose_draft';
+
 export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmail = '' }) {
-  const [email, setEmail] = useState(recipientEmail || '');
-  const [subject, setSubject] = useState('');
-  const [htmlBody, setHtmlBody] = useState('');
+  // Initialize from localStorage or props
+  const [email, setEmail] = useState(() => {
+    if (recipientEmail) return recipientEmail;
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).email || '' : '';
+  });
+  const [subject, setSubject] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).subject || '' : '';
+  });
+  const [htmlBody, setHtmlBody] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).htmlBody || '' : '';
+  });
+
+  // Save to localStorage whenever data changes
+  useEffect(() => {
+    const draft = { email, subject, htmlBody, timestamp: Date.now() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+  }, [email, subject, htmlBody]);
 
   const handleSend = () => {
     if (!email.trim()) {
@@ -20,6 +39,13 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
       subject: isReply ? '' : subject.trim(),
       htmlBody,
     });
+    // Clear localStorage on successful send
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const handleCancel = () => {
+    // Keep localStorage data - don't clear on cancel
+    onCancel();
   };
 
   const containerStyle = {
@@ -136,11 +162,11 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
       </div>
 
       <div style={actionsStyle}>
-        <button style={cancelButtonStyle} onClick={onCancel}>
+        <button style={cancelButtonStyle} onClick={handleCancel}>
           Cancel
         </button>
         <button style={sendButtonStyle} onClick={handleSend}>
-          Send 
+          Send
         </button>
       </div>
     </div>

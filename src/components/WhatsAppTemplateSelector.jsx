@@ -1,16 +1,38 @@
 import { useState, useEffect } from 'react';
 import { useGlobalStore } from '../store/globalStore';
 
+const WHATSAPP_STORAGE_KEY = 'whatsapp_compose_draft';
+
 export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '', inboxId = '' }) {
   const [templates, setTemplates] = useState([]);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [parameters, setParameters] = useState({});
+  const [selectedTemplate, setSelectedTemplate] = useState(() => {
+    const saved = localStorage.getItem(WHATSAPP_STORAGE_KEY);
+    return saved ? JSON.parse(saved).selectedTemplate || null : null;
+  });
+  const [parameters, setParameters] = useState(() => {
+    const saved = localStorage.getItem(WHATSAPP_STORAGE_KEY);
+    return saved ? JSON.parse(saved).parameters || {} : {};
+  });
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [mobile, setMobile] = useState(recipientMobile || '');
+  const [mobile, setMobile] = useState(recipientMobile || (() => {
+    const saved = localStorage.getItem(WHATSAPP_STORAGE_KEY);
+    return saved ? JSON.parse(saved).mobile || '' : '';
+  })());
 
   const whatsappTemplates = useGlobalStore(state => state.whatsappTemplates);
   const fetchWhatsappTemplates = useGlobalStore(state => state.fetchWhatsappTemplates);
+
+  // Save draft to localStorage whenever data changes
+  useEffect(() => {
+    const draft = {
+      mobile,
+      selectedTemplate,
+      parameters,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(WHATSAPP_STORAGE_KEY, JSON.stringify(draft));
+  }, [mobile, selectedTemplate, parameters]);
 
   useEffect(() => {
     let mounted = true;
@@ -80,12 +102,19 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
         mobile: mobile.trim(),
         template: templateToSend,
       });
+      // Clear localStorage on successful send
+      localStorage.removeItem(WHATSAPP_STORAGE_KEY);
     } catch (error) {
       console.error('Failed to send template:', error);
       alert('Failed to send template');
     } finally {
       setSending(false);
     }
+  };
+
+  const handleCancel = () => {
+    // Keep localStorage data - don't clear on cancel
+    onCancel();
   };
 
   // Layout Styles
@@ -448,6 +477,7 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
             >
               <option value="">-----Select-----</option>
               {templates
+                .slice()
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((template) => (
                   <option key={template.name} value={template.name}>
@@ -476,7 +506,7 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
 
             {/* Action Buttons inside scrollable parameters container */}
             <div style={buttonContainerStyle}>
-              <button style={cancelButtonStyle} onClick={onCancel} disabled={sending}>
+              <button style={cancelButtonStyle} onClick={handleCancel} disabled={sending}>
                 Cancel
               </button>
               <button
@@ -496,7 +526,7 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
         {selectedTemplate && (!selectedTemplate.parameters || selectedTemplate.parameters.length === 0) && (
           <div style={{ marginTop: '12px' }}>
             <div style={buttonContainerStyle}>
-              <button style={cancelButtonStyle} onClick={onCancel} disabled={sending}>
+              <button style={cancelButtonStyle} onClick={handleCancel} disabled={sending}>
                 Cancel
               </button>
               <button
