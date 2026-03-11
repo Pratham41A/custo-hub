@@ -203,7 +203,21 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
   dispatch(setLoading({ key: 'messages', value: true }));
   try {
     const data = await apiService.getMessages(inboxId);
-    const messageList = data.messages || data.data || data || [];
+    let messageList = data.messages || data.data || data || [];
+    
+    // Process draft messages: extract content.value for messages with isDraft: true
+    messageList = messageList.map(msg => {
+      if (msg.isDraft && msg.content?.value) {
+        // For draft messages, move the content.value to the body/content field for display
+        return {
+          ...msg,
+          body: msg.content.value,
+          content: msg.content.value,
+        };
+      }
+      return msg;
+    });
+    
     dispatch(setMessages(messageList));
     try {
       dispatch(showToast({ text: 'Messages loaded', type: 'success' }));

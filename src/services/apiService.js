@@ -192,6 +192,14 @@ class ApiService {
       body: { mobile, template },
     });
   }
+
+  // Save Draft Message - POST /draft
+  async saveDraft(inboxId, message, contentType = 'normal', source = 'email') {
+    return this.request('/draft', {
+      method: 'POST',
+      body: { inboxId, message, contentType, source },
+    });
+  }
 }
 
 export const apiService = new ApiService();

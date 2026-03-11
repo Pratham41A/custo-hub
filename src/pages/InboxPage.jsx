@@ -86,6 +86,7 @@ export default function InboxPage() {
   const [composeForm, setComposeForm] = useState({ email: '', subject: '', body: '', ccRecipients: '', bccRecipients: '', mobile: '', template: '' });
   const messagesEndRef = useRef(null);
   const messageRefsMap = useRef({});
+  const replyDraftTimeoutRef = useRef(null);
 
   useEffect(() => { 
     loadInboxes();
@@ -165,6 +166,45 @@ export default function InboxPage() {
       setReplyForm({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
     }
   }, [replyingToId, selectedInbox]);
+
+  // Auto-save reply draft messages to database when user types
+  useEffect(() => {
+    // Only save if there's a reply body and we're actively replying
+    if (!replyingToId || !selectedInbox?._id || !replyForm.body) return;
+
+    // Clear previous timeout
+    if (replyDraftTimeoutRef.current) {
+      clearTimeout(replyDraftTimeoutRef.current);
+    }
+
+    // Set new timeout for debounced save (save after 2 seconds of inactivity)
+    replyDraftTimeoutRef.current = setTimeout(async () => {
+      try {
+        const message = inboxMessages.find(m => m._id === replyingToId);
+        const source = message?.source === 'whatsapp' ? 'whatsapp' : 'email';
+        
+        // Determine contentType based on the message content
+        const contentType = replyForm.body.includes('<') ? 'html' : 'normal';
+        
+        console.log(`💾 Saving ${source} reply draft for inbox: ${selectedInbox._id}`);
+        await apiService.saveDraft(
+          selectedInbox._id,
+          replyForm.body,
+          contentType,
+          source
+        );
+      } catch (error) {
+        console.error('❌ Failed to save reply draft:', error);
+      }
+    }, 2000);
+
+    // Cleanup timeout on component unmount
+    return () => {
+      if (replyDraftTimeoutRef.current) {
+        clearTimeout(replyDraftTimeoutRef.current);
+      }
+    };
+  }, [replyForm.body, replyingToId, selectedInbox?._id]);
 
   // Helper: resolve and format mobile number with country code from multiple possible locations
   // Returns concatenated countrycode + mobileno (e.g., "+919920292920" or "919920292920")
@@ -473,7 +513,8 @@ export default function InboxPage() {
       // Handle both inbox as object with _id and inbox as string ID
       const mInboxId = typeof m.inbox === 'object' ? m.inbox?._id : m.inbox;
       const selectedId = selectedInbox?._id;
-      return mInboxId === selectedId;
+      // Exclude draft messages from the message list - they will be shown in reply form
+      return mInboxId === selectedId && !m.isDraft;
     })
     .sort((a, b) => {
       const timeA = new Date(a.messageDateTime || a.createdAt).getTime();
@@ -498,6 +539,60 @@ export default function InboxPage() {
     prevMessagesLenRef.current = currentLen;
     prevInboxIdRef.current = currentInboxId;
   }, [inboxMessages, selectedInbox]);
+
+  // Load draft messages into reply form when messages are fetched
+  useEffect(() => {
+    console.log('🔍 Draft effect triggered');
+    console.log('📊 Messages:', messages);
+    console.log('📍 Selected Inbox ID:', selectedInbox?._id);
+    
+    if (!messages || !selectedInbox?._id) {
+      console.log('⚠️ Missing messages or selectedInbox, skipping');
+      return;
+    }
+
+    console.log('🔎 Looking for draft message...');
+    
+    // Find draft message for this inbox
+    const draftMessage = messages.find(msg => {
+      const mInboxId = typeof msg.inbox === 'object' ? msg.inbox?._id : msg.inbox;
+      console.log(`   Checking message ${msg._id}:`, {
+        inboxMatch: mInboxId === selectedInbox._id,
+        isDraft: msg.isDraft,
+        actualInboxId: mInboxId,
+        expectedInboxId: selectedInbox._id
+      });
+      return mInboxId === selectedInbox._id && msg.isDraft === true;
+    });
+
+    console.log('📝 Draft Message Found:', draftMessage);
+
+    // Set reply form body from draft content
+    // Try multiple paths: content.value, content (if string), or body
+    const draftContent = draftMessage?.content?.value || draftMessage?.content || draftMessage?.body;
+    
+    console.log('🔍 Checking content paths:', {
+      'content.value': draftMessage?.content?.value,
+      'content': draftMessage?.content,
+      'body': draftMessage?.body,
+      'finalDraftContent': draftContent
+    });
+
+    if (draftContent) {
+      console.log('✅ Setting reply form body with:', draftContent);
+      setReplyForm(prev => {
+        console.log('📋 Old replyForm:', prev);
+        const updated = {
+          ...prev,
+          body: draftContent
+        };
+        console.log('📋 New replyForm:', updated);
+        return updated;
+      });
+    } else {
+      console.log('❌ No draft content found or draft is undefined');
+    }
+  }, [messages, selectedInbox?._id]);
 
   const handleInboxClick = async (inbox) => {
     // Toggle selection: if clicking same inbox, deselect and hide panel
