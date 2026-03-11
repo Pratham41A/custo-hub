@@ -190,6 +190,11 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
     }
   };
 
+  const handlePaste = (e) => {
+    // Prevent default paste behavior that can cause scroll jumps
+    // The onChange handler will manage the state update
+  };
+
   // Layout Styles
   const containerStyle = {
     display: 'flex',
@@ -572,6 +577,7 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
               type="text"
               value={mobile}
               onChange={(e) => setMobile(e.target.value)}
+              onPaste={handlePaste}
               style={inputStyle}
             />
           </div>
@@ -616,6 +622,7 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
                   onFocus={() => setFocusedParamName(param.name)}
                   onBlur={() => setFocusedParamName(null)}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   placeholder={`Type text • Ctrl+B for bold • Ctrl+I for italic`}
                 />
               </div>

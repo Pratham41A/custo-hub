@@ -327,6 +327,11 @@ export default function InboxPage() {
     }
   };
 
+  const handlePaste = (e) => {
+    // Prevent default paste behavior that can cause scroll jumps
+    // The onChange handler will manage the state update
+  };
+
   // Robust date parser: handles numeric timestamps, ISO strings only
   // Returns 0 for human-readable strings (e.g., "Jan 2, 6:03 AM") without explicit year,
   // so getItemTimestamp can infer the year from createdAt
@@ -1140,17 +1145,17 @@ export default function InboxPage() {
                       <>
                         <div style={{ marginBottom: '12px' }}>
                           <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
-                          <input type="text" style={inputStyle} placeholder="email@example.com" value={replyForm.toRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, toRecipients: e.target.value })} />
+                          <input type="text" style={inputStyle} placeholder="email@example.com" value={replyForm.toRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, toRecipients: e.target.value })} onPaste={handlePaste} />
                         </div>
                         
                         <div style={{ marginBottom: '12px' }}>
                           <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>CC (Optional)</label>
-                          <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={replyForm.ccRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, ccRecipients: e.target.value })} />
+                          <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={replyForm.ccRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, ccRecipients: e.target.value })} onPaste={handlePaste} />
                         </div>
                         
                         <div style={{ marginBottom: '12px' }}>
                           <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>BCC (Optional)</label>
-                          <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={replyForm.bccRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, bccRecipients: e.target.value })} />
+                          <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={replyForm.bccRecipients || ''} onChange={(e) => setReplyForm({ ...replyForm, bccRecipients: e.target.value })} onPaste={handlePaste} />
                         </div>
 
                         <div style={{ marginBottom: '12px' }}>
@@ -1537,18 +1542,18 @@ export default function InboxPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Or Enter Custom Query Type</div>
-                    <input type="text" style={inputStyle} placeholder="Custom query type (optional)" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                    <input type="text" style={inputStyle} placeholder="Custom query type (optional)" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} onPaste={handlePaste} />
                   </div>
                 </>
               ) : (
                 <>
                   <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Enter Query Type</div>
-                  <input type="text" style={inputStyle} placeholder="Enter query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                  <input type="text" style={inputStyle} placeholder="Enter query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} onPaste={handlePaste} />
                 </>
               )}
               <div style={{ marginTop: '12px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Resolved By</div>
-                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} />
+                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} onPaste={handlePaste} />
               </div>
             </div>
             <div style={modalFooterStyle}>
@@ -1581,19 +1586,19 @@ export default function InboxPage() {
                   </div>
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Or Enter Custom Query Type</div>
-                    <input type="text" style={inputStyle} placeholder="Custom query type (optional)" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                    <input type="text" style={inputStyle} placeholder="Custom query type (optional)" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} onPaste={handlePaste} />
                   </div>
                 </>
               ) : (
                 <>
                   <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Enter Query Type</div>
-                  <input type="text" style={inputStyle} placeholder="Enter query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} />
+                  <input type="text" style={inputStyle} placeholder="Enter query type" value={modal.data.customQuery || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, customQuery: e.target.value } })} onPaste={handlePaste} />
                 </>
               )}
 
               <div style={{ marginTop: '12px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Resolved By</div>
-                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} />
+                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} onPaste={handlePaste} />
               </div>
             </div>
             <div style={modalFooterStyle}>
@@ -1662,19 +1667,19 @@ export default function InboxPage() {
             <div style={modalBodyStyle}>
               {modal.data.replyMessage?.source === 'whatsapp' ? (
                 <>
-                  <input type="text" style={inputStyle} placeholder="Template name (for outside 24h window)" value={modal.data.template || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, template: e.target.value } })} />
+                  <input type="text" style={inputStyle} placeholder="Template name (for outside 24h window)" value={modal.data.template || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, template: e.target.value } })} onPaste={handlePaste} />
                   <textarea style={textareaStyle} placeholder="Or direct message (within 24h window)" value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />
                 </>
               ) : (
                 <>
                   <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block' }}>To</label>
-                  <input type="text" style={inputStyle} placeholder="email@example.com" value={modal.data.toRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, toRecipients: e.target.value } })} />
+                  <input type="text" style={inputStyle} placeholder="email@example.com" value={modal.data.toRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, toRecipients: e.target.value } })} onPaste={handlePaste} />
                   
                   <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block', marginTop: '12px' }}>CC (Optional)</label>
-                  <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={modal.data.ccRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, ccRecipients: e.target.value } })} />
+                  <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={modal.data.ccRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, ccRecipients: e.target.value } })} onPaste={handlePaste} />
                   
                   <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block', marginTop: '12px' }}>BCC (Optional)</label>
-                  <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={modal.data.bccRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, bccRecipients: e.target.value } })} />
+                  <input type="text" style={inputStyle} placeholder="email1@example.com, email2@example.com" value={modal.data.bccRecipients || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, bccRecipients: e.target.value } })} onPaste={handlePaste} />
                   
                   <label style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', display: 'block', marginTop: '12px' }}>Message</label>
                   <textarea style={textareaStyle} value={modal.data.body || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, body: e.target.value } })} />

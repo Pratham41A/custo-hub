@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
@@ -23,8 +24,22 @@ const formats = [
 ];
 
 export function EmailEditor({ value, onChange, placeholder = '' }) {
+  const containerRef = useRef(null);
+
+  const handleChange = (content) => {
+    onChange(content);
+    // Scroll to bottom of container after state update
+    requestAnimationFrame(() => {
+      const container = containerRef.current?.querySelector('.ql-container');
+      if (container) {
+        // Scroll to the bottom to show the newly pasted content
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+  };
+
   return (
-    <div style={{ marginBottom: '16px' }}>
+    <div style={{ marginBottom: '16px' }} ref={containerRef}>
       <style>{`
         .email-editor .ql-container {
           border: 1px solid rgba(0, 0, 0, 0.12);
@@ -64,7 +79,7 @@ export function EmailEditor({ value, onChange, placeholder = '' }) {
       <div className="email-editor">
         <ReactQuill
           value={value || ''}
-          onChange={onChange}
+          onChange={handleChange}
           modules={modules}
           formats={formats}
           placeholder={placeholder}

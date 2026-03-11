@@ -95,6 +95,11 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
     onCancel();
   };
 
+  const handlePaste = (e) => {
+    // Prevent default paste behavior that can cause scroll jumps
+    // The onChange handler will manage the state update
+  };
+
   const containerStyle = {
     padding: '20px',
     background: '#fff',
@@ -182,6 +187,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          onPaste={handlePaste}
            placeholder="email1@example.com,email2@example.com"
           style={inputStyle}
         />
@@ -198,6 +204,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
             console.log('CC onChange fired:', e.target.value);
             setCcRecipients(e.target.value);
           }}
+          onPaste={handlePaste}
           style={inputStyle}
         />
       </div>
@@ -213,6 +220,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
             console.log('BCC onChange fired:', e.target.value);
             setBccRecipients(e.target.value);
           }}
+          onPaste={handlePaste}
           style={inputStyle}
         />
       </div>
@@ -225,6 +233,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
+            onPaste={handlePaste}
             style={inputStyle}
           />
         </div>
