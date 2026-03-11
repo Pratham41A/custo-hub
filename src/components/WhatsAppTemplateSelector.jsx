@@ -1,22 +1,38 @@
 import { useState, useEffect } from 'react';
 import { useGlobalStore } from '../store/globalStore';
 
-const WHATSAPP_STORAGE_KEY = 'whatsapp_compose_draft';
+// default key if nothing else provided
+const DEFAULT_WHATSAPP_KEY = 'whatsapp_compose_draft';
 
-export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '', inboxId = '' }) {
+export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '', inboxId = '', storageKey }) {
+  // determine actual key to use
+  // key === null -> disable storage
+  // key undefined -> choose based on inboxId or default
+  let key;
+  if (storageKey === null) {
+    key = null;
+  } else if (storageKey === undefined) {
+    key = inboxId ? `whatsapp_compose_inbox_${inboxId}` : DEFAULT_WHATSAPP_KEY;
+  } else {
+    key = storageKey;
+  }
+
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(() => {
-    const saved = localStorage.getItem(WHATSAPP_STORAGE_KEY);
+    if (key === null) return null;
+    const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved).selectedTemplate || null : null;
   });
   const [parameters, setParameters] = useState(() => {
-    const saved = localStorage.getItem(WHATSAPP_STORAGE_KEY);
+    if (key === null) return {};
+    const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved).parameters || {} : {};
   });
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [mobile, setMobile] = useState(recipientMobile || (() => {
-    const saved = localStorage.getItem(WHATSAPP_STORAGE_KEY);
+    if (key === null) return '';
+    const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved).mobile || '' : '';
   })());
   const [focusedParamName, setFocusedParamName] = useState(null);
@@ -26,14 +42,15 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
 
   // Save draft to localStorage whenever data changes
   useEffect(() => {
+    if (key === null) return; // if storage disabled
     const draft = {
       mobile,
       selectedTemplate,
       parameters,
       timestamp: Date.now()
     };
-    localStorage.setItem(WHATSAPP_STORAGE_KEY, JSON.stringify(draft));
-  }, [mobile, selectedTemplate, parameters]);
+    localStorage.setItem(key, JSON.stringify(draft));
+  }, [mobile, selectedTemplate, parameters, key]);
 
   useEffect(() => {
     let mounted = true;
@@ -104,7 +121,7 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
         template: templateToSend,
       });
       // Clear localStorage on successful send
-      localStorage.removeItem(WHATSAPP_STORAGE_KEY);
+      if (key) localStorage.removeItem(key);
     } catch (error) {
       console.error('Failed to send template:', error);
       alert('Failed to send template');

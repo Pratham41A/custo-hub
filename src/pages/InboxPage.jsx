@@ -1176,8 +1176,8 @@ export default function InboxPage() {
                       }}
                       onClick={() => {
                         const mobile = resolveMobile(selectedInbox, null) || '';
-                        // Always open template modal directly for WhatsApp
-                        setModal({ type: 'whatsapp-compose-template', data: { mobile } });
+                        // Always open template modal directly for WhatsApp (inbox context)
+                        setModal({ type: 'whatsapp-compose-template', data: { mobile, inboxSpecific: true } });
                       }}
                     >
                       <img src="https://s3.ap-south-1.amazonaws.com/cdn2.onference.in/Whatsapp.png" alt="WhatsApp" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
@@ -1406,6 +1406,8 @@ export default function InboxPage() {
           <div style={{ ...modalStyle, maxWidth: '1200px', width: '95%', maxHeight: '90vh', padding: 0, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
             <WhatsAppTemplateSelector
               recipientMobile={modal.data.mobile || ''}
+              // if inboxSpecific flag is present, disable persistence; otherwise allow global draft
+              storageKey={modal.data?.inboxSpecific ? null : undefined}
               onSend={(data) => {
                 handleSendWhatsApp(data);
                 closeModal();
@@ -1558,6 +1560,8 @@ export default function InboxPage() {
             <OutlookEditor
               isReply={false}
               recipientEmail={selectedInbox?.owner?.email || selectedInbox?.owner?.dummyOwner?.name || selectedInbox?.dummyOwner?.name || ''}
+              // disable persistence for inbox‑specific composer (global draft should not be reused)
+              storageKey={null}
               onSend={(data) => {
                 handleSendEmail(data);
               }}
@@ -1573,6 +1577,8 @@ export default function InboxPage() {
             <WhatsAppEditor
               isReply={false}
               recipientMobile={resolveMobile(selectedInbox, null) || ''}
+              // disable persistence for inbox‑specific composer
+              storageKey={null}
               onSend={(data) => {
                 handleSendWhatsApp(data);
               }}
@@ -1587,6 +1593,8 @@ export default function InboxPage() {
           <div style={{ ...modalStyle, maxWidth: '1200px', width: '95%', maxHeight: '90vh', padding: 0, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
             <WhatsAppTemplateSelector
               recipientMobile={modal.data.mobile || ''}
+              // disable persistence for reply flow
+              storageKey={null}
               onSend={(data) => {
                 handleSendWhatsApp(data);
                 closeModal();

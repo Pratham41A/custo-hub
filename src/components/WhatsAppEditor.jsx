@@ -1,6 +1,6 @@
 import { WhatsAppTemplateSelector } from './WhatsAppTemplateSelector';
 
-export function WhatsAppEditor({ onSend, onCancel, isReply = false, recipientMobile = '', isTemplateExpired = false }) {
+export function WhatsAppEditor({ onSend, onCancel, isReply = false, recipientMobile = '', isTemplateExpired = false, storageKey }) {
   // WhatsApp now only supports template mode
   // If 24-hour conversation window has passed, show template selector directly
   return (
@@ -8,6 +8,7 @@ export function WhatsAppEditor({ onSend, onCancel, isReply = false, recipientMob
       onSend={onSend}
       onCancel={onCancel}
       recipientMobile={recipientMobile}
+      storageKey={storageKey}
     />
   );
 }

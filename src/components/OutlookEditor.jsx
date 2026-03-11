@@ -1,31 +1,50 @@
 import { useState, useEffect } from 'react';
 import { EmailEditor } from './EmailEditor';
 
-const STORAGE_KEY = 'email_compose_draft';
+// default key used when no override is provided
+const DEFAULT_STORAGE_KEY = 'email_compose_draft';
 
-export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmail = '' }) {
+export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmail = '', storageKey }) {
+  // determine which key to use for persisting drafts
+  // - storageKey === null -> disable storage entirely
+  // - storageKey === undefined -> use default global key
+  // - otherwise use provided string
+  let key;
+  if (storageKey === null) {
+    key = null;
+  } else if (storageKey === undefined) {
+    key = DEFAULT_STORAGE_KEY;
+  } else {
+    key = storageKey;
+  }
+
   // Initialize from localStorage or props
   const [email, setEmail] = useState(() => {
     if (recipientEmail) return recipientEmail;
-    const saved = localStorage.getItem(STORAGE_KEY);
+    if (key === null) return '';
+    const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved).email || '' : '';
   });
   const [subject, setSubject] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    if (key === null) return '';
+    const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved).subject || '' : '';
   });
   const [htmlBody, setHtmlBody] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    if (key === null) return '';
+    const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved).htmlBody || '' : '';
   });
   const [ccRecipients, setCcRecipients] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    if (key === null) return '';
+    const saved = localStorage.getItem(key);
     const value = saved ? JSON.parse(saved).ccRecipients || '' : '';
     console.log('📥 CC initialized from localStorage:', { saved: saved ? JSON.parse(saved) : null, ccRecipients: value });
     return value;
   });
   const [bccRecipients, setBccRecipients] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    if (key === null) return '';
+    const saved = localStorage.getItem(key);
     const value = saved ? JSON.parse(saved).bccRecipients || '' : '';
     console.log('📥 BCC initialized from localStorage:', { saved: saved ? JSON.parse(saved) : null, bccRecipients: value });
     return value;
@@ -33,6 +52,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
 
   // Save to localStorage whenever data changes
   useEffect(() => {
+    if (key === null) return; // skip persisting if storage is disabled
     const draft = { email, subject, htmlBody, ccRecipients, bccRecipients, timestamp: Date.now() };
     console.log('💾 Saving draft to localStorage:', draft);
     console.log('🔍 Current state check:', {
@@ -43,8 +63,8 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
       ccValue: ccRecipients,
       bccValue: bccRecipients
     });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-  }, [email, subject, htmlBody, ccRecipients, bccRecipients]);
+    localStorage.setItem(key, JSON.stringify(draft));
+  }, [email, subject, htmlBody, ccRecipients, bccRecipients, key]);
 
   const handleSend = () => {
     if (!email.trim()) {
@@ -72,7 +92,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
       bccRecipients: bccRecipients.trim(),
     });
     // Clear localStorage on successful send
-    localStorage.removeItem(STORAGE_KEY);
+    if (key) localStorage.removeItem(key);
   };
 
   const handleCancel = () => {
