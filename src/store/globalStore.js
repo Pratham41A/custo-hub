@@ -225,6 +225,10 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
           content: parsedContent,
         };
       }
+      // Ensure WhatsApp messages have contentType='special' for formatting support
+      if (msg.source === 'whatsapp' && !msg.contentType) {
+        return { ...msg, contentType: 'special' };
+      }
       return msg;
     });
     
@@ -365,6 +369,10 @@ export const sendWhatsappTemplate = (mobile, template) => async (dispatch, getSt
     const result = await apiService.sendWhatsappTemplate(mobile, template);
     const msg = result?.message || result?.data || result;
     if (msg && (msg._id || msg.id)) {
+      // Ensure WhatsApp template messages have contentType='special' for formatting support
+      if (!msg.contentType) {
+        msg.contentType = 'special';
+      }
       const state = getState().global;
       dispatch(setMessages([...state.messages, msg]));
       const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
@@ -398,6 +406,10 @@ export const sendWhatsappMessage = (mobile, body) => async (dispatch, getState) 
     const result = await apiService.sendWhatsappMessage(mobile, body);
     const msg = result?.message || result?.data || result;
     if (msg && (msg._id || msg.id)) {
+      // Ensure WhatsApp messages have contentType='special' for formatting support
+      if (!msg.contentType) {
+        msg.contentType = 'special';
+      }
       const state = getState().global;
       dispatch(setMessages([...state.messages, msg]));
       const inboxId = msg.inboxId || msg.inbox || result?.inboxId;
@@ -604,6 +616,10 @@ export const sendWhatsappTemplateWithParams = (mobile, template) => async (dispa
     const result = await apiService.sendWhatsappTemplateWithParams(mobile, template);
     const msg = result?.message || result?.data || result;
     if (msg && (msg._id || msg.id)) {
+      // Ensure WhatsApp template messages have contentType='special' for formatting support
+      if (!msg.contentType) {
+        msg.contentType = 'special';
+      }
       const state = getState().global;
       dispatch(setMessages([...state.messages, msg]));
       const inboxId = msg.inboxId || msg.inbox || result?.inboxId;

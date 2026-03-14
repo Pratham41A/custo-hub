@@ -399,6 +399,104 @@ export default function InboxPage() {
     // The onChange handler will manage the state update
   };
 
+  // Apply formatting to reply text (bold/italic)
+  const applyReplyFormatting = (formatType, textareaElement) => {
+    if (!textareaElement) return;
+
+    const start = textareaElement.selectionStart;
+    const end = textareaElement.selectionEnd;
+    const selectedText = textareaElement.value.substring(start, end);
+
+    if (!selectedText) {
+      showToast('Please select text to format', 'info');
+      return;
+    }
+
+    let formattedText;
+    if (formatType === 'bold') {
+      // toggle: remove surrounding asterisks if already bold
+      if (selectedText.startsWith('*') && selectedText.endsWith('*')) {
+        formattedText = selectedText.slice(1, -1);
+      } else {
+        formattedText = `*${selectedText}*`;
+      }
+    } else if (formatType === 'italic') {
+      // toggle: remove surrounding underscores if already italic
+      if (selectedText.startsWith('_') && selectedText.endsWith('_')) {
+        formattedText = selectedText.slice(1, -1);
+      } else {
+        formattedText = `_${selectedText}_`;
+      }
+    }
+
+    const newValue = textareaElement.value.substring(0, start) + formattedText + textareaElement.value.substring(end);
+    setReplyForm({ ...replyForm, body: newValue });
+
+    // Restore focus to textarea
+    setTimeout(() => textareaElement.focus(), 0);
+  };
+
+  // Handle keyboard shortcuts for reply formatting
+  const handleReplyKeyDown = (e) => {
+    // Ctrl+B for bold, Ctrl+I for italic
+    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      e.preventDefault();
+      applyReplyFormatting('bold', e.target);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+      e.preventDefault();
+      applyReplyFormatting('italic', e.target);
+    }
+  };
+
+  // Format preview text with WhatsApp formatting (bold, italic, strikethrough)
+  const renderFormattedPreview = (text) => {
+    if (!text || typeof text !== 'string') return text;
+
+    // Parse inline formatting: *bold*, _italic_, ~strikethrough~
+    let keyCounter = 0;
+    const parseInline = (str) => {
+      const nodes = [];
+      let i = 0;
+      while (i < str.length) {
+        const ch = str[i];
+        if (ch === '*' || ch === '_' || ch === '~') {
+          const closing = str.indexOf(ch, i + 1);
+          if (closing > -1) {
+            // Process text before this marker
+            if (i > 0) {
+              nodes.push(str.slice(0, i));
+            }
+            const innerText = str.slice(i + 1, closing);
+            const innerNodes = parseInline(innerText);
+            let element;
+            if (ch === '*') {
+              element = <strong key={`ps-${keyCounter++}`} style={{ fontWeight: 700 }}>{innerNodes}</strong>;
+            } else if (ch === '_') {
+              element = <em key={`ps-${keyCounter++}`} style={{ fontStyle: 'italic' }}>{innerNodes}</em>;
+            } else if (ch === '~') {
+              element = <del key={`ps-${keyCounter++}`} style={{ textDecoration: 'line-through' }}>{innerNodes}</del>;
+            }
+            nodes.push(element);
+            // Continue parsing after the closing marker
+            const rest = str.slice(closing + 1);
+            if (rest.length) {
+              nodes.push(...parseInline(rest));
+            }
+            return nodes;
+          }
+        }
+        i += 1;
+      }
+      // No more markers, just plain text
+      if (str.length) {
+        nodes.push(str);
+      }
+      return nodes;
+    };
+
+    return parseInline(text);
+  };
+
   // Robust date parser: handles numeric timestamps, ISO strings only
   // Returns 0 for human-readable strings (e.g., "Jan 2, 6:03 AM") without explicit year,
   // so getItemTimestamp can infer the year from createdAt
@@ -1094,6 +1192,17 @@ export default function InboxPage() {
                               __html: inbox.preview?.value
                             }}
                           />
+                        ) : inbox.source === 'whatsapp' ? (
+                          <div
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              display: 'inline'
+                            }}
+                          >
+                            {renderFormattedPreview(inbox.preview?.value || '')}
+                          </div>
                         ) : (
                           inbox.preview?.value || 'No preview available'
                         )}
@@ -1249,9 +1358,10 @@ export default function InboxPage() {
                             <div style={{ marginBottom: '12px' }}>
                               <textarea
                                 style={textareaStyle}
-                                placeholder="Type your reply..."
+                                placeholder="Type your reply • Ctrl+B for bold • Ctrl+I for italic"
                                 value={replyForm.body || ''}
                                 onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                                onKeyDown={handleReplyKeyDown}
                               />
                             </div>
                             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
@@ -1284,9 +1394,10 @@ export default function InboxPage() {
                           
                           <textarea
                             style={textareaStyle}
-                           
+                            placeholder="Type your reply • Ctrl+B for bold • Ctrl+I for italic"
                             value={replyForm.body || ''}
                             onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                            onKeyDown={handleReplyKeyDown}
                           />
                         </div>
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

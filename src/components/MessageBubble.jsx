@@ -633,15 +633,88 @@ function MessageBubble({
     }
 
     if (contentType === 'special') {
-      // WhatsApp formatting: *bold*, _italic_, ~strikethrough~
+      // WhatsApp formatting: *bold*, _italic_, ~strikethrough~, ```monospace```
       const formatSpecialText = (text) => {
+        // Split code blocks first
+        const codeRegex = /```([\s\S]*?)```/g;
+        const segments = [];
+        let lastIndex = 0;
+        let match;
+        while ((match = codeRegex.exec(text)) !== null) {
+          if (match.index > lastIndex) {
+            segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+          }
+          segments.push({ type: 'code', content: match[1] });
+          lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex < text.length) {
+          segments.push({ type: 'text', content: text.slice(lastIndex) });
+        }
+
+        let keyCounter = 0;
+        const parseInline = (str) => {
+          const nodes = [];
+          let i = 0;
+          while (i < str.length) {
+            const ch = str[i];
+            if (ch === '*' || ch === '_' || ch === '~') {
+              const closing = str.indexOf(ch, i + 1);
+              if (closing > -1) {
+                // Process text before this marker
+                if (i > 0) {
+                  nodes.push(...createLinkifiedNodes(str.slice(0, i), `t-${keyCounter++}`));
+                }
+                const innerText = str.slice(i + 1, closing);
+                const innerNodes = parseInline(innerText);
+                let element;
+                if (ch === '*') element = <strong key={`s-${keyCounter++}`}>{innerNodes}</strong>;
+                else if (ch === '_') element = <em key={`s-${keyCounter++}`}>{innerNodes}</em>;
+                else if (ch === '~') element = <del key={`s-${keyCounter++}`}>{innerNodes}</del>;
+                nodes.push(element);
+                // Continue parsing after the closing marker
+                const rest = str.slice(closing + 1);
+                if (rest.length) {
+                  nodes.push(...parseInline(rest));
+                }
+                return nodes;
+              }
+            }
+            i += 1;
+          }
+          // No more markers, just plain text
+          if (str.length) {
+            nodes.push(...createLinkifiedNodes(str, `t-${keyCounter++}`));
+          }
+          return nodes;
+        };
+
         return (
           <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {text.split(/\*(.*?)\*|_(.*?)_|~(.*?)~/g).map((part, idx) => {
-              if (idx % 4 === 1) return <strong key={idx}>{part}</strong>;
-              if (idx % 4 === 2) return <em key={idx}>{part}</em>;
-              if (idx % 4 === 3) return <del key={idx}>{part}</del>;
-              return createLinkifiedNodes(part, `cs-${idx}`);
+            {segments.flatMap((seg) => {
+              if (seg.type === 'code') {
+                return (
+                  <code key={`code-${keyCounter++}`} style={{
+                    background: '#f1f5f9',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    display: 'block',
+                    whiteSpace: 'pre-wrap',
+                    marginBottom: '8px'
+                  }}>
+                    {seg.content}
+                  </code>
+                );
+              }
+              const lines = seg.content.split(/\n/);
+              return lines.flatMap((line, idx) => {
+                const processed = parseInline(line);
+                if (idx < lines.length - 1) {
+                  return [...processed, <br key={`br-${keyCounter++}`} />];
+                }
+                return processed;
+              });
             })}
           </div>
         );
