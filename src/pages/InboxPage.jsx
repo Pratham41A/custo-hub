@@ -1810,7 +1810,11 @@ export default function InboxPage() {
                     <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Select Query Type</div>
                     <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
                       <option value="">Select Query Type</option>
-                      {queryTypes.map((qt) => {
+                      {[...queryTypes].sort((a, b) => {
+                        const labelA = (typeof a === 'string') ? a : (a?.name ?? a?.value ?? a?._id ?? JSON.stringify(a));
+                        const labelB = (typeof b === 'string') ? b : (b?.name ?? b?.value ?? b?._id ?? JSON.stringify(b));
+                        return String(labelA).localeCompare(String(labelB));
+                      }).map((qt) => {
                         const val = (typeof qt === 'string') ? qt : (qt?.name ?? qt?.value ?? qt?._id ?? JSON.stringify(qt));
                         const label = (typeof qt === 'string') ? qt : (qt?.name ?? String(val));
                         return (
@@ -1856,7 +1860,11 @@ export default function InboxPage() {
                     <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Select Query Type</div>
                     <select style={selectStyle} value={modal.data.queryType || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, queryType: e.target.value } })}>
                       <option value="">Select Query Type</option>
-                      {queryTypes.map((qt) => {
+                      {[...queryTypes].sort((a, b) => {
+                        const labelA = (typeof a === 'string') ? a : (a?.name ?? a?.value ?? a?._id ?? JSON.stringify(a));
+                        const labelB = (typeof b === 'string') ? b : (b?.name ?? b?.value ?? b?._id ?? JSON.stringify(b));
+                        return String(labelA).localeCompare(String(labelB));
+                      }).map((qt) => {
                         const val = (typeof qt === 'string') ? qt : (qt?.name ?? qt?.value ?? qt?._id ?? JSON.stringify(qt));
                         const label = (typeof qt === 'string') ? qt : (qt?.name ?? String(val));
                         return (
