@@ -749,9 +749,9 @@ export default function InboxPage() {
     setShowContextPanel(false);
     try {
       await fetchMessages(inbox._id);
-      // If this inbox is from WhatsApp, mark it as read on open
+      // If this inbox is from WhatsApp, mark it as read on open (only if currently unread)
       try {
-        if (inbox?.source === 'whatsapp' && inbox?.status !== 'read') {
+        if (inbox?.source === 'whatsapp' && inbox?.status === 'unread') {
           await updateInboxStatus(inbox._id, 'read');
         }
       } catch (e) {
