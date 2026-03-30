@@ -1838,7 +1838,11 @@ export default function InboxPage() {
               )}
               <div style={{ marginTop: '12px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Resolved By</div>
-                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} onPaste={handlePaste} />
+                <select style={selectStyle} value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })}>
+                  <option value="">Select Resolved By</option>
+                  <option value="Manisha">Manisha</option>
+                  <option value="Apoorva">Apoorva</option>
+                </select>
               </div>
             </div>
             <div style={modalFooterStyle}>
@@ -1887,7 +1891,11 @@ export default function InboxPage() {
 
               <div style={{ marginTop: '12px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Resolved By</div>
-                <input type="text" style={inputStyle} placeholder="Resolved by (agent name)" value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })} onPaste={handlePaste} />
+                <select style={selectStyle} value={modal.data.resolvedBy || ''} onChange={(e) => setModal({ ...modal, data: { ...modal.data, resolvedBy: e.target.value } })}>
+                  <option value="">Select Resolved By</option>
+                  <option value="Manisha">Manisha</option>
+                  <option value="Apoorva">Apoorva</option>
+                </select>
               </div>
             </div>
             <div style={modalFooterStyle}>
