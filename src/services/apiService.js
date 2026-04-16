@@ -126,6 +126,23 @@ class ApiService {
     });
   }
 
+  // Outlook Forward - POST /outlook/forward
+  async forwardEmail(forwardMessageId, toRecipients = '', ccRecipients = '', bccRecipients = '') {
+    const body = { 
+      forwardMessageId, 
+      toRecipients, 
+      ccRecipients: ccRecipients || ''
+    };
+    // Only include bccRecipients if it's explicitly passed (not undefined)
+    if (bccRecipients !== undefined) {
+      body.bccRecipients = bccRecipients || '';
+    }
+    return this.request('/outlook/forward', {
+      method: 'POST',
+      body,
+    });
+  }
+
   // Subscriptions - GET /subscriptions/:userId
   async getSubscriptions(userId, limit = 10) {
     return this.request(`/subscriptions/${userId}`, {

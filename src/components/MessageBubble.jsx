@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ForwardEmailModal } from './ForwardEmailModal';
 
 const formatDate = (date) => {
   if (!date) return '';
@@ -269,6 +270,8 @@ function MessageBubble({
   const [showReplyPreview, setShowReplyPreview] = useState(false);
   // Local optimistic status so UI updates immediately on button clicks
   const [localStatus, setLocalStatus] = useState(null);
+  // Forward email modal state
+  const [showForwardModal, setShowForwardModal] = useState(false);
 
   // Determine if message was sent by user/agent
   const isSent = msg.isSent === true;
@@ -732,6 +735,61 @@ function MessageBubble({
 
   return (
     <div style={bubbleStyle}>
+      {/* Action buttons header - For email messages at top right */}
+      {msg.source === 'email' && !isSent && (onReply || msg.source === 'email') && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', marginBottom: '10px' }}>
+          {onReply && (
+            <button
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#6366f1',
+                cursor: 'pointer',
+                fontSize: '16px',
+                transition: 'opacity 0.2s',
+                padding: '4px 8px',
+                borderRadius: '6px',
+              }}
+              onClick={() => onReply(msg._id)}
+              onMouseEnter={(e) => {
+                e.target.style.opacity = '0.7';
+                e.target.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.opacity = '1';
+                e.target.style.backgroundColor = 'transparent';
+              }}
+              title="Reply to this message"
+            >
+              ⤴
+            </button>
+          )}
+          <button
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#6366f1',
+              cursor: 'pointer',
+              fontSize: '16px',
+              transition: 'opacity 0.2s',
+              padding: '4px 8px',
+              borderRadius: '6px',
+            }}
+            onClick={() => setShowForwardModal(true)}
+            onMouseEnter={(e) => {
+              e.target.style.opacity = '0.7';
+              e.target.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.opacity = '1';
+              e.target.style.backgroundColor = 'transparent';
+            }}
+            title="Forward this email"
+          >
+            ↗
+          </button>
+        </div>
+      )}
       {/* Source Image */}
       {getSourceImage(msg.source) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', opacity: 0.7 }}>
@@ -975,30 +1033,23 @@ function MessageBubble({
         </div>
       )}
 
-      {/* Footer with timestamp and reply button */}
+      {/* Footer with timestamp */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
         <span style={{ fontSize: '11px', opacity: 0.7 }}>
           {formatDate(msg.messageDateTime || msg.createdAt)}
         </span>
-        {!isSent && onReply && (
-          <button
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: isSent ? '#fff' : '#6366f1',
-              cursor: 'pointer',
-              fontSize: '16px',
-              transition: 'opacity 0.2s',
-            }}
-            onClick={() => onReply(msg._id)}
-            onMouseEnter={(e) => e.target.style.opacity = '0.7'}
-            onMouseLeave={(e) => e.target.style.opacity = '1'}
-            title="Reply to this message"
-          >
-            ⤴
-          </button>
-        )}
       </div>
+
+      {/* Forward Email Modal */}
+      {showForwardModal && (
+        <ForwardEmailModal
+          message={msg}
+          onClose={() => setShowForwardModal(false)}
+          onSuccess={() => {
+            setShowForwardModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }
