@@ -217,6 +217,19 @@ class ApiService {
       body: { inboxId, message, contentType, source },
     });
   }
+
+  // Clear draft message for an inbox by posting an empty draft to /draft
+  async deleteDraft(inboxId, source = 'email') {
+    return this.request('/draft', {
+      method: 'POST',
+      body: {
+        inboxId,
+        contentType: 'normal',
+        message: '',
+        source,
+      },
+    });
+  }
 }
 
 export const apiService = new ApiService();

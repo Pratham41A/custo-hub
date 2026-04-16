@@ -116,12 +116,19 @@ export function WhatsAppTemplateSelector({ onSend, onCancel, recipientMobile = '
         })) || []
       };
 
-      onSend({
+      const result = onSend({
         mobile: mobile.trim(),
         template: templateToSend,
       });
-      // Clear localStorage on successful send
-      if (key) localStorage.removeItem(key);
+
+      if (result && typeof result.then === 'function') {
+        await result;
+      }
+
+      if (key) {
+        localStorage.removeItem(key);
+        console.log('🗑️ Cleared WhatsAppTemplateSelector draft localStorage after successful send:', key);
+      }
     } catch (error) {
       console.error('Failed to send template:', error);
       alert('Failed to send template');

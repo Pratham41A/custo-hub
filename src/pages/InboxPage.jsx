@@ -63,6 +63,7 @@ export default function InboxPage() {
   const getFilteredInboxes = useGlobalStore(state => state.getFilteredInboxes);
   const ensureAllInboxesLoaded = useGlobalStore(state => state.ensureAllInboxesLoaded);
   const fetchMessages = useGlobalStore(state => state.fetchMessages);
+  const setMessages = useGlobalStore(state => state.setMessages);
   const sendWhatsappTemplate = useGlobalStore(state => state.sendWhatsappTemplate);
   const sendWhatsappMessage = useGlobalStore(state => state.sendWhatsappMessage);
   const sendEmailReply = useGlobalStore(state => state.sendEmailReply);
@@ -233,6 +234,44 @@ export default function InboxPage() {
     };
   }, [replyForm.body, replyForm.toRecipients, replyForm.ccRecipients, replyForm.bccRecipients, replyForm.template, replyingToId, selectedInbox?._id]);
 
+  const clearInboxDrafts = async (inboxId) => {
+    if (!inboxId) return;
+
+    const storageKeys = [
+      `email_inbox_${inboxId}`,
+      `whatsapp_inbox_${inboxId}`,
+      `whatsapp_compose_inbox_${inboxId}`,
+      `whatsapp_compose_draft`,
+      `email_compose_draft`
+    ];
+    storageKeys.forEach((key) => {
+      if (key && localStorage.getItem(key) !== null) {
+        localStorage.removeItem(key);
+        console.log('🗑️ Cleared inbox draft localStorage:', key);
+      }
+    });
+
+    if (Array.isArray(messages)) {
+      const filteredMessages = messages.filter((msg) => {
+        const mInboxId = typeof msg.inbox === 'object' ? msg.inbox?._id : msg.inbox;
+        return !(mInboxId === inboxId && msg.isDraft === true);
+      });
+      setMessages(filteredMessages);
+    }
+
+    if (apiService.deleteDraft) {
+      const sourcesToClear = ['whatsapp', 'email'];
+      for (const source of sourcesToClear) {
+        try {
+          await apiService.deleteDraft(inboxId, source);
+          console.log(`✅ Cleared ${source} draft from API for inbox:`, inboxId);
+        } catch (error) {
+          console.warn(`Draft API clear failed for ${source} or unsupported:`, error);
+        }
+      }
+    }
+  };
+
   // Helper: resolve and format mobile number with country code from multiple possible locations
   // Returns concatenated countrycode + mobileno (e.g., "+919920292920" or "919920292920")
   const resolveMobile = (inbox, message) => {
@@ -306,14 +345,10 @@ export default function InboxPage() {
             
             // If this message belongs to the currently selected inbox, add it to messages list
             if (selectedInbox && selectedInbox._id === mInboxId) {
-              setMessages(prevMessages => {
-                if (!Array.isArray(prevMessages)) return [messageData];
-                // Check if message already exists to avoid duplicates
-                if (prevMessages.some(m => m._id === messageData._id)) {
-                  return prevMessages;
-                }
-                return [...prevMessages, messageData];
-              });
+              const currentMessages = Array.isArray(messages) ? messages : [];
+              if (!currentMessages.some(m => m._id === messageData._id)) {
+                setMessages([...currentMessages, messageData]);
+              }
             }
           }
         });
@@ -327,7 +362,7 @@ export default function InboxPage() {
     };
 
     setupSocketListeners();
-  }, [selectedInbox, setInboxes, fetchMessages]);
+  }, [selectedInbox, messages, setInboxes, fetchMessages]);
   
   // Enable audio playback on user interaction
   useEffect(() => {
@@ -609,6 +644,10 @@ export default function InboxPage() {
       // Inbox preview field
       const inboxFields = [
         i.preview?.value,
+        i.queryType,
+        i.queryType?.name,
+        i.queryType?.value,
+        i.queryType?._id,
       ];
       
       // Combine all searchable fields
@@ -692,45 +731,55 @@ export default function InboxPage() {
 
     console.log('📝 Draft Message Found:', draftMessage);
 
-    // Try multiple paths to get draft content
-    let draftContent = draftMessage?.content?.value || draftMessage?.content || draftMessage?.body;
-    
-    console.log('🔍 Checking content paths:', {
-      'content.value': draftMessage?.content?.value,
-      'content': draftMessage?.content,
-      'body': draftMessage?.body,
-      'finalDraftContent': draftContent
-    });
-
-    if (draftContent) {
-      // Try to parse as JSON object (if it's stringified draft data)
-      let draftData = { body: draftContent };
-      
-      try {
-        const parsed = JSON.parse(draftContent);
-        if (parsed && typeof parsed === 'object' && parsed.body !== undefined) {
-          draftData = parsed;
-          console.log('✅ Draft parsed as JSON:', draftData);
-        }
-      } catch (e) {
-        // Not JSON, treat as plain text body
-        console.log('📝 Draft is plain text (not JSON)');
+    const getDraftContent = (msg) => {
+      if (!msg) return null;
+      if (msg.content?.value) return msg.content.value;
+      if (typeof msg.content === 'string') return msg.content;
+      if (msg.body !== undefined && msg.body !== null) return msg.body;
+      if (msg.content && typeof msg.content === 'object') {
+        if (msg.content.body !== undefined) return msg.content.body;
+        if (msg.content.message !== undefined) return msg.content.message;
+        return msg.content;
       }
-      
-      console.log('✅ Setting reply form with draft data:', draftData);
-      setReplyForm(prev => {
-        console.log('📋 Old replyForm:', prev);
-        const updated = {
-          ...prev,
-          body: draftData.body || '',
-          toRecipients: draftData.toRecipients || prev.toRecipients || '',
-          ccRecipients: draftData.ccRecipients || '',
-          bccRecipients: draftData.bccRecipients || '',
-          template: draftData.template || ''
-        };
-        console.log('📋 New replyForm:', updated);
-        return updated;
-      });
+      return null;
+    };
+
+    let draftContent = getDraftContent(draftMessage);
+    console.log('🔍 Normalized draft content:', draftContent);
+
+    if (draftContent !== null && draftContent !== undefined && draftContent !== '') {
+      let draftData = { body: '' };
+
+      if (typeof draftContent === 'string') {
+        try {
+          const parsed = JSON.parse(draftContent);
+          if (parsed && typeof parsed === 'object') {
+            draftData = parsed;
+            console.log('✅ Draft parsed as JSON:', draftData);
+          } else {
+            draftData.body = draftContent;
+            console.log('📝 Draft is plain text (string content)');
+          }
+        } catch (e) {
+          draftData.body = draftContent;
+          console.log('📝 Draft is plain text (not JSON)');
+        }
+      } else if (typeof draftContent === 'object') {
+        draftData = draftContent;
+        console.log('✅ Draft content is object:', draftData);
+      } else {
+        draftData.body = String(draftContent);
+        console.log('📝 Draft content coerced to string:', draftData.body);
+      }
+
+      setReplyForm(prev => ({
+        ...prev,
+        body: draftData.body || '',
+        toRecipients: draftData.toRecipients || prev.toRecipients || '',
+        ccRecipients: draftData.ccRecipients || '',
+        bccRecipients: draftData.bccRecipients || '',
+        template: draftData.template || ''
+      }));
     } else {
       console.log('❌ No draft content found or draft is undefined');
     }
@@ -884,6 +933,7 @@ export default function InboxPage() {
       }
       showToast('Reply sent', 'success');
       closeModal();
+      await clearInboxDrafts(selectedInbox._id);
       await fetchMessages(selectedInbox._id);
     } catch (error) {
       console.error('Reply send error:', error);
@@ -958,6 +1008,7 @@ export default function InboxPage() {
       showToast('Reply sent', 'success');
       setReplyingToId(null);
       setReplyForm({ body: '', template: '', toRecipients: '', ccRecipients: '', bccRecipients: '' });
+      await clearInboxDrafts(selectedInbox._id);
       await fetchMessages(selectedInbox._id);
     } catch (error) {
       console.error('❌ Inline reply error:', error.message, error);
@@ -1713,9 +1764,7 @@ export default function InboxPage() {
             <OutlookEditor
               isReply={false}
               recipientEmail={''}
-              onSend={(data) => {
-                handleSendEmail(data);
-              }}
+              onSend={(data) => handleSendEmail(data)}
               onCancel={closeModal}
             />
           </div>
@@ -1728,9 +1777,7 @@ export default function InboxPage() {
             <WhatsAppEditor
               isReply={false}
               recipientMobile={''}
-              onSend={(data) => {
-                handleSendWhatsApp(data);
-              }}
+              onSend={(data) => handleSendWhatsApp(data)}
               onCancel={closeModal}
             />
           </div>
@@ -1744,10 +1791,7 @@ export default function InboxPage() {
               recipientMobile={modal.data.mobile || ''}
               // use separate inbox-specific key if opened from inbox; otherwise use global default
               storageKey={modal.data?.inboxSpecific && modal.data?.inboxId ? `whatsapp_inbox_${modal.data.inboxId}` : undefined}
-              onSend={(data) => {
-                handleSendWhatsApp(data);
-                closeModal();
-              }}
+              onSend={(data) => handleSendWhatsApp(data).then(closeModal)}
               onCancel={closeModal}
             />
           </div>
@@ -1914,9 +1958,7 @@ export default function InboxPage() {
               recipientEmail={selectedInbox?.owner?.email || selectedInbox?.owner?.dummyOwner?.name || selectedInbox?.dummyOwner?.name || ''}
               // use inbox-specific storage key so each inbox has its own draft
               storageKey={selectedInbox?._id ? `email_inbox_${selectedInbox._id}` : null}
-              onSend={(data) => {
-                handleSendEmail(data);
-              }}
+              onSend={(data) => handleSendEmail(data)}
               onCancel={closeModal}
             />
           </div>
@@ -1931,9 +1973,7 @@ export default function InboxPage() {
               recipientMobile={resolveMobile(selectedInbox, null) || ''}
               // use inbox-specific storage key so each inbox has its own draft
               storageKey={selectedInbox?._id ? `whatsapp_inbox_${selectedInbox._id}` : null}
-              onSend={(data) => {
-                handleSendWhatsApp(data);
-              }}
+              onSend={(data) => handleSendWhatsApp(data)}
               onCancel={closeModal}
             />
           </div>
@@ -1947,10 +1987,7 @@ export default function InboxPage() {
               recipientMobile={modal.data.mobile || ''}
               // disable persistence for reply flow
               storageKey={null}
-              onSend={(data) => {
-                handleSendWhatsApp(data);
-                closeModal();
-              }}
+              onSend={(data) => handleSendWhatsApp(data).then(closeModal)}
               onCancel={closeModal}
             />
           </div>

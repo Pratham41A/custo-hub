@@ -615,7 +615,11 @@ function MessageBubble({
 
     // Fallback to legacy fields
     if (!contentValue) {
-      contentValue = msg.body || msg.text || '';
+      if (typeof msg.body === 'object' && msg.body !== null) {
+        contentValue = msg.body.body ?? msg.body.message ?? JSON.stringify(msg.body);
+      } else {
+        contentValue = msg.body || msg.text || '';
+      }
     }
 
     if (!contentValue) return null;
@@ -736,34 +740,8 @@ function MessageBubble({
   return (
     <div style={bubbleStyle}>
       {/* Action buttons header - For email messages at top right */}
-      {msg.source === 'email' && !isSent && (onReply || msg.source === 'email') && (
+      {!isSent && onReply && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', marginBottom: '10px' }}>
-          {onReply && (
-            <button
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#6366f1',
-                cursor: 'pointer',
-                fontSize: '16px',
-                transition: 'opacity 0.2s',
-                padding: '4px 8px',
-                borderRadius: '6px',
-              }}
-              onClick={() => onReply(msg._id)}
-              onMouseEnter={(e) => {
-                e.target.style.opacity = '0.7';
-                e.target.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.opacity = '1';
-                e.target.style.backgroundColor = 'transparent';
-              }}
-              title="Reply to this message"
-            >
-              ⤴
-            </button>
-          )}
           <button
             style={{
               background: 'transparent',
@@ -775,7 +753,7 @@ function MessageBubble({
               padding: '4px 8px',
               borderRadius: '6px',
             }}
-            onClick={() => setShowForwardModal(true)}
+            onClick={() => onReply(msg._id)}
             onMouseEnter={(e) => {
               e.target.style.opacity = '0.7';
               e.target.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
@@ -784,10 +762,36 @@ function MessageBubble({
               e.target.style.opacity = '1';
               e.target.style.backgroundColor = 'transparent';
             }}
-            title="Forward this email"
+            title="Reply to this message"
           >
-            ↗
+            ⤴
           </button>
+          {msg.source === 'email' && (
+            <button
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#6366f1',
+                cursor: 'pointer',
+                fontSize: '16px',
+                transition: 'opacity 0.2s',
+                padding: '4px 8px',
+                borderRadius: '6px',
+              }}
+              onClick={() => setShowForwardModal(true)}
+              onMouseEnter={(e) => {
+                e.target.style.opacity = '0.7';
+                e.target.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.opacity = '1';
+                e.target.style.backgroundColor = 'transparent';
+              }}
+              title="Forward this email"
+            >
+              ↗
+            </button>
+          )}
         </div>
       )}
       {/* Source Image */}

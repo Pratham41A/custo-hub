@@ -61,7 +61,7 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
     localStorage.setItem(key, JSON.stringify(draft));
   }, [email, subject, htmlBody, ccRecipients, bccRecipients, key]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!email.trim()) {
       alert('Please enter email address');
       return;
@@ -90,15 +90,27 @@ export function OutlookEditor({ onSend, onCancel, isReply = false, recipientEmai
     // debug: log both versions so we can verify transform in console/network
     console.log('📧 OutlookEditor sending body', { original: htmlBody, normalized: normalizedBody });
 
-    onSend({
-      toRecipients: email.trim(),
-      subject: isReply ? '' : subject.trim(),
-      htmlBody: normalizedBody,
-      ccRecipients: ccRecipients.trim(),
-      bccRecipients: bccRecipients.trim(),
-    });
-    // Clear localStorage on successful send
-    if (key) localStorage.removeItem(key);
+    try {
+      const result = onSend({
+        toRecipients: email.trim(),
+        subject: isReply ? '' : subject.trim(),
+        htmlBody: normalizedBody,
+        ccRecipients: ccRecipients.trim(),
+        bccRecipients: bccRecipients.trim(),
+      });
+
+      if (result && typeof result.then === 'function') {
+        await result;
+      }
+
+      if (key) {
+        localStorage.removeItem(key);
+        console.log('🗑️ Cleared OutlookEditor draft localStorage after successful send:', key);
+      }
+    } catch (error) {
+      console.error('❌ OutlookEditor send failed:', error);
+      alert('Failed to send email');
+    }
   };
 
   const handleCancel = () => {
