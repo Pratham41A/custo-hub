@@ -351,12 +351,8 @@ function MessageBubble({
     }
 
     if (contentType === 'html') {
-      const sanitizedHTML = sanitizeAndFixHTML(contentValue, isSent);
       return (
-        <div
-          style={{ fontSize: '12px', wordBreak: 'break-word' }}
-          dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
-        />
+        <div dangerouslySetInnerHTML={{ __html: contentValue }} />
       );
     }
 
@@ -630,12 +626,8 @@ function MessageBubble({
     }
 
     if (contentType === 'html') {
-      const sanitizedHTML = sanitizeAndFixHTML(contentValue, isSent);
       return (
-        <div
-          style={{ fontSize: '14px', wordBreak: 'break-word' }}
-          dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
-        />
+        <div dangerouslySetInnerHTML={{ __html: contentValue }} />
       );
     }
 
