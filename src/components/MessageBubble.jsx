@@ -96,6 +96,16 @@ const sanitizeAndFixHTML = (htmlString, isSent = false) => {
         }
       });
 
+      // 5) Add target="_blank" rel="noopener noreferrer" to all regular <a> tags that don't already have target="_blank"
+      html = html.replace(/<a\b([^>]*?)>/gi, (match, attrs) => {
+        // Check if it already has target="_blank"
+        if (/target\s*=\s*["']?_blank["']?/i.test(attrs)) {
+          return match; // Already has target="_blank", leave as is
+        }
+        // Add target="_blank" rel="noopener noreferrer"
+        return `<a ${attrs} target="_blank" rel="noopener noreferrer">`;
+      });
+
       return html;
     };
 
@@ -351,8 +361,9 @@ function MessageBubble({
     }
 
     if (contentType === 'html') {
+      const sanitizedHTML = sanitizeAndFixHTML(contentValue, isSent);
       return (
-        <div dangerouslySetInnerHTML={{ __html: contentValue }} />
+        <div dangerouslySetInnerHTML={{ __html: sanitizedHTML }} />
       );
     }
 
@@ -626,8 +637,9 @@ function MessageBubble({
     }
 
     if (contentType === 'html') {
+      const sanitizedHTML = sanitizeAndFixHTML(contentValue, isSent);
       return (
-        <div dangerouslySetInnerHTML={{ __html: contentValue }} />
+        <div dangerouslySetInnerHTML={{ __html: sanitizedHTML }} />
       );
     }
 

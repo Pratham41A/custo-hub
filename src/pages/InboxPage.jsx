@@ -61,7 +61,7 @@ export default function InboxPage() {
   const loading = useGlobalStore(state => state.loading);
   const fetchInboxes = useGlobalStore(state => state.fetchInboxes);
   const getFilteredInboxes = useGlobalStore(state => state.getFilteredInboxes);
-  const ensureAllInboxesLoaded = useGlobalStore(state => state.ensureAllInboxesLoaded);
+  const loadInboxesProgressively = useGlobalStore(state => state.loadInboxesProgressively);
   const fetchMessages = useGlobalStore(state => state.fetchMessages);
   const setMessages = useGlobalStore(state => state.setMessages);
   const sendWhatsappTemplate = useGlobalStore(state => state.sendWhatsappTemplate);
@@ -95,13 +95,13 @@ export default function InboxPage() {
     setShowContextPanel(false);
   }, [activeFilter]);
 
-  // Load all inboxes on mount for local filtering
+  // Progressive load: Show read/unread inboxes first, then all inboxes in background
   useEffect(() => {
     const initializeInboxes = async () => {
       try {
-        // Ensure all inboxes are loaded and cached
+        // Start progressive loading: display read/unread immediately, fetch all in background
         if (!Array.isArray(allInboxes) || allInboxes.length === 0) {
-          await ensureAllInboxesLoaded();
+          await loadInboxesProgressively();
         }
       } catch (error) {
         console.error('Failed to initialize inboxes:', error);

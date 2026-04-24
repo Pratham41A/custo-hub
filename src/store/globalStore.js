@@ -26,6 +26,9 @@ const initialState = {
     userDetails: false,
   },
 
+  // Progressive loading flags
+  allInboxesFullyLoaded: false,
+
   // UI State
   selectedInbox: null,
   activeFilter: 'all',
@@ -89,6 +92,9 @@ const globalSlice = createSlice({
       const exists = state.messages.some(m => m._id === message._id);
       if (!exists) state.messages = [...state.messages, message];
     },
+    setAllInboxesFullyLoaded(state, action) {
+      state.allInboxesFullyLoaded = action.payload;
+    },
   },
 });
 
@@ -114,6 +120,7 @@ export const {
   handleInboxUpdated,
   handleInboxCreated,
   handleMessageCreated,
+  setAllInboxesFullyLoaded,
 } = globalSlice.actions;
 
 // configure store
@@ -196,6 +203,100 @@ export const fetchInboxes = (options = {}) => async (dispatch, getState) => {
     throw error;
   } finally {
     dispatch(setLoading({ key: 'inboxes', value: false }));
+  }
+};
+
+// Progressive loading: Load read/unread first, then all inboxes in background
+export const loadInboxesProgressively = () => async (dispatch, getState) => {
+  const state = getState().global;
+  const { activeFilter } = state;
+  
+  // Step 1: Show loading state and fetch read + unread statuses first
+  dispatch(setLoading({ key: 'inboxes', value: true }));
+  
+  try {
+    // First, determine what statuses to load initially
+    // If filter is 'all' or 'resolved', show read+unread first
+    // If filter is specific (read/unread), show that first
+    const initialStatuses = activeFilter === 'all' || activeFilter === 'resolved' 
+      ? ['read', 'unread'] 
+      : [activeFilter];
+    
+    // Fetch initial inboxes (read + unread or specific status)
+    const initialPromises = initialStatuses.map(status => 
+      apiService.getInboxes({ status })
+    );
+    
+    let initialInboxes = [];
+    try {
+      const results = await Promise.all(initialPromises);
+      results.forEach(data => {
+        let inboxList = [];
+        if (Array.isArray(data)) {
+          inboxList = data;
+        } else if (data?.inboxes && Array.isArray(data.inboxes)) {
+          inboxList = data.inboxes;
+        } else if (data?.data && Array.isArray(data.data)) {
+          inboxList = data.data;
+        }
+        initialInboxes = [...initialInboxes, ...inboxList];
+      });
+    } catch (err) {
+      console.error('Failed to fetch initial inboxes:', err);
+    }
+    
+    // Display initial inboxes (read + unread)
+    dispatch(setInboxes(initialInboxes));
+    dispatch(setAllInboxes(initialInboxes));
+    dispatch(setLoading({ key: 'inboxes', value: false }));
+    
+    // Step 2: Fetch ALL inboxes in background (without setting loading state)
+    // This won't block the UI or cause visual disruption
+    (async () => {
+      try {
+        const allData = await apiService.getInboxes({ status: '' });
+        let allInboxes = [];
+        if (Array.isArray(allData)) {
+          allInboxes = allData;
+        } else if (allData?.inboxes && Array.isArray(allData.inboxes)) {
+          allInboxes = allData.inboxes;
+        } else if (allData?.data && Array.isArray(allData.data)) {
+          allInboxes = allData.data;
+        }
+        
+        // Update state with all inboxes
+        dispatch(setAllInboxes(allInboxes));
+        
+        // Update displayed inboxes based on current filter (don't disrupt user)
+        const currentState = getState().global;
+        const currentFilter = currentState.activeFilter;
+        
+        if (currentFilter === 'all') {
+          dispatch(setInboxes(allInboxes));
+        } else {
+          const filtered = allInboxes.filter(i => i.status === currentFilter);
+          dispatch(setInboxes(filtered));
+        }
+        
+        // Mark as fully loaded
+        dispatch(setAllInboxesFullyLoaded(true));
+        
+        console.log('✅ All inboxes loaded progressively in background');
+      } catch (err) {
+        console.error('Failed to fetch all inboxes in background:', err);
+        dispatch(setAllInboxesFullyLoaded(false));
+      }
+    })();
+    
+    return initialInboxes;
+  } catch (error) {
+    console.error('Failed to load inboxes progressively:', error);
+    dispatch(setLoading({ key: 'inboxes', value: false }));
+    try {
+      dispatch(showToast({ text: 'Failed to fetch inboxes', type: 'error' }));
+      setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
+    } catch (e) {}
+    throw error;
   }
 };
 
@@ -708,6 +809,7 @@ export const useGlobalStore = (selector) => {
     setPagination: (v) => dispatch(setPagination(v)),
     fetchDashboard: (opts) => dispatch(fetchDashboard(opts)),
     fetchInboxes: (opts) => dispatch(fetchInboxes(opts)),
+    loadInboxesProgressively: () => dispatch(loadInboxesProgressively()),
     fetchMessages: (id) => dispatch(fetchMessages(id)),
     updateInboxStatus: (id, status, qt, rb) => dispatch(updateInboxStatus(id, status, qt, rb)),
     fetchUserSubscriptions: (u) => dispatch(fetchUserSubscriptions(u)),
