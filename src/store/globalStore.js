@@ -656,6 +656,8 @@ export const updateMessage = (inboxId, messageId, status, queryType = '', resolv
 };
 
 export const createNote = (inboxId, body, dueDate) => async (dispatch, getState) => {
+  // NOTE: dueDate should already be converted to UTC ISO string by the caller
+  // This conversion happens in InboxPage.jsx using convertISTtoUTC utility
   try {
     const result = await apiService.createActivity(inboxId, body, dueDate);
     const state = getState().global;

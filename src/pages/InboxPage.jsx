@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGlobalStore } from '../store/globalStore';
 import { apiService } from '../services/apiService';
+import { convertISTtoUTC, formatDateIST } from '../utils/timezoneUtils';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ContextPanel } from '../components/layout/ContextPanel';
 import { EmailEditor } from '../components/EmailEditor';
@@ -9,18 +10,8 @@ import { WhatsAppEditor } from '../components/WhatsAppEditor';
 import { WhatsAppTemplateSelector } from '../components/WhatsAppTemplateSelector';
 import MessageBubble from '../components/MessageBubble';
 
-const formatDate = (date) => {
-  if (!date) return '';
-  const parsed = new Date(date);
-  if (isNaN(parsed.getTime()) || parsed.getFullYear() < 2020) {
-    return date;
-  }
-  return parsed.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-  });
-};
+// Backward compatibility wrapper - uses the new utility function
+const formatDate = (date) => formatDateIST(date);
 
 const statusFilters = [
   { value: 'all', label: 'All' },
@@ -30,17 +21,6 @@ const statusFilters = [
 ];
 
 export default function InboxPage() {
-  // Timezone conversion helper - Convert IST datetime-local input to UTC ISO string
-  const convertISTtoUTC = (istDateTimeString) => {
-    if (!istDateTimeString) return null;
-    // istDateTimeString format: "2026-01-22T14:30" (from datetime-local)
-    const date = new Date(istDateTimeString);
-    // IST is UTC+5:30, subtract to get UTC equivalent
-    const istOffsetMs = 5.5 * 60 * 60 * 1000;
-    const utcTime = new Date(date.getTime() - istOffsetMs);
-    return utcTime.toISOString();
-  };
-
   // Check if current UTC time is past the template time
   const isTemplateTimeExpired = (templateTime) => {
     if (!templateTime) return false;
@@ -1825,7 +1805,10 @@ export default function InboxPage() {
                   />
                 </div>
 
-                {/* Display selected datetime info */}
+                {/* Timezone info */}
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '8px', fontStyle: 'italic' }}>
+                  📍 Time is in IST (Indian Standard Time, UTC+5:30)
+                </div>
 
               </div>
             </div>

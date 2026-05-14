@@ -1,18 +1,9 @@
 import { useState } from 'react';
 import { useGlobalStore } from '../../store/globalStore';
+import { formatDateIST } from '../../utils/timezoneUtils';
 
-const formatDate = (date) => {
-  if (!date) return '';
-  const parsed = new Date(date);
-  if (isNaN(parsed.getTime()) || parsed.getFullYear() < 2020) {
-    return date;
-  }
-  return parsed.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-  });
-};
+// Backward compatibility wrapper - uses the new utility function
+const formatDate = (date) => formatDateIST(date);
 
 export function ContextPanel({ inbox, onClose }) {
   const subscriptions = useGlobalStore(state => state.subscriptions);

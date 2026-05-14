@@ -172,6 +172,9 @@ class ApiService {
   }
 
   // Create Activity - POST /activity
+  // NOTE: dueDate should be a UTC ISO string (e.g., "2026-01-22T08:30:00.000Z")
+  // The server stores and returns dates in UTC format
+  // Timezone conversion happens on the client side using timezoneUtils
   async createActivity(inboxId, body, dueDate) {
     return this.request('/activity', {
       method: 'POST',
