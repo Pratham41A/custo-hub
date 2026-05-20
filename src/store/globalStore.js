@@ -2,6 +2,102 @@ import { configureStore, createSlice } from '@reduxjs/toolkit';
 import { useSelector, useDispatch } from 'react-redux';
 import { apiService } from '../services/apiService';
 
+const getDisplayValue = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const display = getDisplayValue(item);
+      if (display) return display;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    return getDisplayValue(
+      value.name ??
+      value.value ??
+      value.label ??
+      value.fullname ??
+      value.email ??
+      value._id ??
+      value.id
+    );
+  }
+  return String(value);
+};
+
+const getLatestItem = (items) => {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return [...items].sort((a, b) => {
+    const aTime = Date.parse(a?.updatedAt || a?.createdAt || '') || 0;
+    const bTime = Date.parse(b?.updatedAt || b?.createdAt || '') || 0;
+    return bTime - aTime;
+  })[0];
+};
+
+const getMessageIdValue = (value) => {
+  if (!value) return '';
+  if (typeof value === 'object') return value._id || value.id || value.messageId || '';
+  return String(value);
+};
+
+const findResolutionForMessage = (msg, resolutions = []) => {
+  if (!msg || !Array.isArray(resolutions)) return null;
+  const messageIds = [msg._id, msg.id, msg.messageId, msg.internetMessageId, msg.outlookMessageId]
+    .filter(Boolean)
+    .map(String);
+
+  return resolutions.find((resolution) => {
+    const resolutionMessageIds = [
+      resolution?.messageId,
+      resolution?.message,
+      resolution?.message_id,
+      resolution?.emailMessageId,
+      resolution?.outlookMessageId,
+      resolution?.internetMessageId,
+    ].map(getMessageIdValue).filter(Boolean).map(String);
+
+    return resolutionMessageIds.some((id) => messageIds.includes(id));
+  }) || null;
+};
+
+const normalizeResolvedMessageFields = (msg, fallback = {}) => {
+  if (!msg || typeof msg !== 'object') return msg;
+
+  const latestResolution = getLatestItem(msg.resolutions);
+  const sources = [
+    msg,
+    msg.resolution,
+    msg.resolvedDetails,
+    msg.resolvedInfo,
+    msg.messageResolution,
+    msg.metadata?.resolution,
+    msg.meta?.resolution,
+    latestResolution,
+    fallback,
+  ].filter(Boolean);
+
+  const readFromSources = (...keys) => {
+    for (const source of sources) {
+      for (const key of keys) {
+        const display = getDisplayValue(source?.[key]);
+        if (display) return display;
+      }
+    }
+    return '';
+  };
+
+  const queryType = readFromSources('queryType', 'query_type', 'queryTypes', 'query_types', 'type', 'category');
+  const resolvedBy = readFromSources('resolvedBy', 'resolved_by', 'resolvedby', 'resolvedByName', 'resolver', 'by', 'user', 'createdBy', 'updatedBy');
+  const status = getDisplayValue(msg.status) || getDisplayValue(fallback.status);
+
+  return {
+    ...msg,
+    ...(status ? { status } : {}),
+    ...(queryType ? { queryType } : {}),
+    ...(resolvedBy ? { resolvedBy } : {}),
+  };
+};
+
 // initial state mirrors the previous zustand store
 const initialState = {
   // Data
@@ -306,9 +402,17 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
   try {
     const data = await apiService.getMessages(inboxId);
     let messageList = data.messages || data.data || data || [];
+    const resolutionList = Array.isArray(data?.resolutions)
+      ? data.resolutions
+      : Array.isArray(data?.resolution)
+        ? data.resolution
+        : [];
     
     // Process draft messages: extract content and parse JSON if needed
     messageList = messageList.map(msg => {
+      const matchingResolution = findResolutionForMessage(msg, resolutionList);
+      const normalizeMessage = (message) => normalizeResolvedMessageFields(message, matchingResolution || {});
+
       if (msg.isDraft && msg.content) {
         // Try to parse content as JSON (it might be a stringified draft object)
         let parsedContent = msg.content;
@@ -321,17 +425,17 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
           // Not JSON, keep as is
         }
         
-        return {
+        return normalizeMessage({
           ...msg,
           body: typeof parsedContent === 'object' ? parsedContent.body : parsedContent,
           content: parsedContent,
-        };
+        });
       }
       // Ensure WhatsApp messages have contentType='special' for formatting support
       if (msg.source === 'whatsapp' && !msg.contentType) {
-        return { ...msg, contentType: 'special' };
+        return normalizeMessage({ ...msg, contentType: 'special' });
       }
-      return msg;
+      return normalizeMessage(msg);
     });
     
     dispatch(setMessages(messageList));
@@ -700,9 +804,22 @@ export const updateMessage = (inboxId, messageId, status, queryType = '', resolv
       return copy;
     };
 
+    const fallbackMessageFields = {
+      status: status === 'ignore' ? undefined : status,
+      queryType,
+      resolvedBy,
+    };
+
     // Update message status
     dispatch(setMessages(state.messages.map(msg =>
-      msg._id === messageId ? { ...msg, status: status === 'ignore' ? undefined : status, ...(queryType ? { queryType } : {}), ...(resolvedBy ? { resolvedBy } : {}) } : msg
+      msg._id === messageId
+        ? normalizeResolvedMessageFields({
+            ...msg,
+            status: status === 'ignore' ? undefined : status,
+            ...(queryType ? { queryType } : {}),
+            ...(resolvedBy ? { resolvedBy } : {})
+          }, fallbackMessageFields)
+        : msg
     )));
 
     // Apply backend logic to inbox
@@ -720,7 +837,10 @@ export const updateMessage = (inboxId, messageId, status, queryType = '', resolv
     const updatedMsg = result?.message || result?.data || null;
     if (updatedMsg && (updatedMsg._id || updatedMsg.id)) {
       const mid = updatedMsg._id || updatedMsg.id;
-      dispatch(setMessages(getState().global.messages.map(msg => msg._id === mid ? { ...msg, ...updatedMsg } : msg)));
+      const normalizedUpdatedMsg = normalizeResolvedMessageFields(updatedMsg, fallbackMessageFields);
+      dispatch(setMessages(getState().global.messages.map(msg =>
+        msg._id === mid ? normalizeResolvedMessageFields({ ...msg, ...normalizedUpdatedMsg }, fallbackMessageFields) : msg
+      )));
     }
 
     const inboxUpdate = result?.inbox || result?.updatedInbox || null;

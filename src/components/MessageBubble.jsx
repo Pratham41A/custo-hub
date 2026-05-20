@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ForwardEmailModal } from './ForwardEmailModal';
 
 const formatDate = (date) => {
@@ -267,6 +267,68 @@ const createLinkifiedNodes = (text, keyBase = 'l') => {
   return nodes;
 };
 
+const getDisplayValue = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const display = getDisplayValue(item);
+      if (display) return display;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    return getDisplayValue(
+      value.name ??
+      value.value ??
+      value.label ??
+      value.fullname ??
+      value.email ??
+      value._id ??
+      value.id
+    );
+  }
+  return String(value);
+};
+
+const getLatestItem = (items) => {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return [...items].sort((a, b) => {
+    const aTime = Date.parse(a?.updatedAt || a?.createdAt || '') || 0;
+    const bTime = Date.parse(b?.updatedAt || b?.createdAt || '') || 0;
+    return bTime - aTime;
+  })[0];
+};
+
+const getResolvedDetails = (message) => {
+  const latestResolution = getLatestItem(message?.resolutions);
+  const sources = [
+    message,
+    message?.resolution,
+    message?.resolvedDetails,
+    message?.resolvedInfo,
+    message?.messageResolution,
+    message?.metadata?.resolution,
+    message?.meta?.resolution,
+    latestResolution,
+  ].filter(Boolean);
+
+  const readFromSources = (...keys) => {
+    for (const source of sources) {
+      for (const key of keys) {
+        const display = getDisplayValue(source?.[key]);
+        if (display) return display;
+      }
+    }
+    return '';
+  };
+
+  return {
+    queryType: readFromSources('queryType', 'query_type', 'queryTypes', 'query_types', 'type', 'category'),
+    resolvedBy: readFromSources('resolvedBy', 'resolved_by', 'resolvedby', 'resolvedByName', 'resolver', 'by', 'user', 'createdBy', 'updatedBy'),
+    source: readFromSources('source', 'channel'),
+  };
+};
+
 function MessageBubble({ 
   msg, 
   onReply, 
@@ -298,6 +360,17 @@ function MessageBubble({
 
   const repliedMessage = getRepliedMessage();
   const effectiveStatus = localStatus ?? msg.status;
+  const resolvedDetails = getResolvedDetails(msg);
+  const messageSource = getDisplayValue(msg.source || msg.channel || resolvedDetails.source).toLowerCase();
+  const isEmailMessage =
+    messageSource === 'email' ||
+    msg.contentType === 'html' ||
+    Boolean(msg.subject || msg.outlookMessageId || msg.internetMessageId) ||
+    (!messageSource && effectiveStatus === 'resolved' && msg.contentType !== 'special');
+
+  useEffect(() => {
+    setLocalStatus(null);
+  }, [msg.status, msg.queryType, msg.resolvedBy, msg.resolution, msg.resolvedDetails, msg.resolvedInfo]);
 
   // Bubble styling based on isSent
   const bubbleStyle = {
@@ -918,7 +991,7 @@ function MessageBubble({
       )}
 
       {/* Conditional Action Buttons - Email only */}
-      {msg.source === 'email' && (
+      {isEmailMessage && (
         <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: `1px solid ${isSent ? 'rgba(255,255,255,0.2)' : 'rgba(99, 102, 241, 0.1)'}` }}>
           {effectiveStatus === 'resolved' ? (
             // Resolved: show labeled fields for clarity
@@ -929,11 +1002,11 @@ function MessageBubble({
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ fontSize: '12px', fontWeight: 600, minWidth: '90px' }}>Query Type:</div>
-                <div style={{ fontSize: '12px', color: isSent ? 'rgba(255,255,255,0.9)' : '#374151' }}>{msg.queryType || '—'}</div>
+                <div style={{ fontSize: '12px', color: isSent ? 'rgba(255,255,255,0.9)' : '#374151' }}>{resolvedDetails.queryType || '-'}</div>
               </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ fontSize: '12px', fontWeight: 600, minWidth: '90px' }}>Resolved by:</div>
-                <div style={{ fontSize: '12px', color: isSent ? 'rgba(255,255,255,0.9)' : '#374151' }}>{msg.resolvedBy || '—'}</div>
+                <div style={{ fontSize: '12px', color: isSent ? 'rgba(255,255,255,0.9)' : '#374151' }}>{resolvedDetails.resolvedBy || '-'}</div>
               </div>
             </div>
           ) : (
