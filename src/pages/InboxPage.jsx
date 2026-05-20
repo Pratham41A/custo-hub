@@ -71,8 +71,14 @@ export default function InboxPage() {
 
   useEffect(() => { 
     loadInboxes();
-    setSelectedInbox(null);
-    setShowContextPanel(false);
+    const selectedStillVisible = selectedInbox && (
+      activeFilter === 'all' || selectedInbox.status === activeFilter
+    );
+
+    if (!selectedStillVisible) {
+      setSelectedInbox(null);
+      setShowContextPanel(false);
+    }
   }, [activeFilter]);
 
   // Progressive load: Show read/unread inboxes first, then all inboxes in background
@@ -638,19 +644,15 @@ export default function InboxPage() {
         field && String(field).toLowerCase().includes(searchLower)
       );
     })
+    .map((item, index) => ({ item, index }))
     .sort((a, b) => {
-      // First, sort by status order (unread comes first)
       const statusOrder = { unread: 0, read: 1, resolved: 2 };
-      const orderA = statusOrder[a.status] ?? 999;
-      const orderB = statusOrder[b.status] ?? 999;
+      const orderA = statusOrder[a.item.status] ?? 3;
+      const orderB = statusOrder[b.item.status] ?? 3;
       if (orderA !== orderB) return orderA - orderB;
-
-      // Within the same status group, sort by a reliable timestamp descending (latest first)
-      const aTime = getItemTimestamp(a);
-      const bTime = getItemTimestamp(b);
-      const diff = bTime - aTime;
-      return diff;
-    });
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
 
   const inboxMessages = messages
     .filter((m) => {
@@ -1285,10 +1287,8 @@ export default function InboxPage() {
                       onClick={async () => {
                         if (!selectedInbox) return;
                         try {
-                          const updated = await updateInboxStatus(selectedInbox._id, 'unread');
-                          // Update inboxes list and selected inbox
-                          setInboxes(inboxes.map(i => i._id === selectedInbox._id ? { ...i, ...updated } : i));
-                          setSelectedInbox(prev => prev ? { ...prev, ...updated } : prev);
+                          await updateInboxStatus(selectedInbox._id, 'unread');
+                          // store already applies optimistic updates; rely on store re-render
                           showToast('Marked as unread', 'info');
                         } catch (e) { showToast('Failed to mark unread', 'error'); }
                       }}
@@ -1313,6 +1313,11 @@ export default function InboxPage() {
                   )}
                 </div>
               </div>
+
+              {/* Progress bar for status updates */}
+              {loading.statusUpdate && (
+                <div style={{ height: '2px', background: '#0066cc', animation: 'pulse 1s infinite' }} />
+              )}
 
               <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
                 {loading.messages ? (

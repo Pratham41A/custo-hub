@@ -24,6 +24,7 @@ const initialState = {
     messages: false,
     dashboard: false,
     userDetails: false,
+    statusUpdate: false,
   },
 
   // Progressive loading flags
@@ -354,46 +355,54 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
 
 export const updateInboxStatus = (inboxId, status, queryType = '', resolvedBy = '') => async (dispatch, getState) => {
   const state = getState().global;
-  const prevInbox = Array.isArray(state.inboxes)
-    ? state.inboxes.find(i => i._id === inboxId)
-    : (state.inboxes?.data || []).find(i => i._id === inboxId);
-
-  const updatedInboxes = state.inboxes.map(i =>
-    i._id === inboxId ? { ...i, status, ...(queryType ? { queryType } : {}) } : i
-  );
-  const updatedAll = state.allInboxes.map(i =>
-    i._id === inboxId ? { ...i, status, ...(queryType ? { queryType } : {}) } : i
-  );
-  const updatedSelected = state.selectedInbox?._id === inboxId
-    ? { ...state.selectedInbox, status, ...(queryType ? { queryType } : {}) }
-    : state.selectedInbox;
-  dispatch(setInboxes(updatedInboxes));
-  dispatch(setAllInboxes(updatedAll));
-  dispatch(setSelectedInbox(updatedSelected));
+  const oldStatus = state.selectedInbox?._id === inboxId ? state.selectedInbox?.status : null;
+  dispatch(setLoading({ key: 'statusUpdate', value: true }));
 
   try {
+    // Call API and wait for 200 response
     const response = await apiService.updateInbox({ inboxId, status, queryType, resolvedBy });
     const updatedInbox = response || {};
-    dispatch(setInboxes(state.inboxes.map(i => i._id === inboxId ? { ...i, ...updatedInbox } : i)));
-    dispatch(setAllInboxes(state.allInboxes.map(i => i._id === inboxId ? { ...i, ...updatedInbox } : i)));
+    
+    // Apply status and queryType to inbox
+    const inboxUpdate = {
+      ...updatedInbox,
+      status: updatedInbox.status || status,
+      ...(queryType ? { queryType } : {})
+    };
+    
+    // Update state after successful API response
+    dispatch(setInboxes(state.inboxes.map(i =>
+      i._id === inboxId ? { ...i, ...inboxUpdate } : i
+    )));
+    dispatch(setAllInboxes(state.allInboxes.map(i =>
+      i._id === inboxId ? { ...i, ...inboxUpdate } : i
+    )));
     if (state.selectedInbox?._id === inboxId) {
-      dispatch(setSelectedInbox({ ...state.selectedInbox, ...updatedInbox }));
+      dispatch(setSelectedInbox({ ...state.selectedInbox, ...inboxUpdate }));
     }
+
+    const newState = getState().global;
+    const newInbox = newState.selectedInbox;
+    if (newInbox && oldStatus && oldStatus !== newInbox.status && newInbox.status) {
+      const currentFilter = newState.activeFilter;
+      if (currentFilter !== newInbox.status) {
+        dispatch(setActiveFilter(newInbox.status));
+      }
+    }
+    
     try {
       dispatch(showToast({ text: `Inbox marked ${status}`, type: 'success' }));
       setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
     } catch (e) {}
-    return updatedInbox;
+    return inboxUpdate;
   } catch (error) {
-    dispatch(setInboxes(state.inboxes.map(i => i._id === inboxId ? { ...i, ...(prevInbox || {}) } : i)));
-    if (state.selectedInbox?._id === inboxId) {
-      dispatch(setSelectedInbox({ ...state.selectedInbox, ...(prevInbox || {}) }));
-    }
     try {
       dispatch(showToast({ text: 'Failed to update inbox', type: 'error' }));
       setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
     } catch (e) {}
     throw error;
+  } finally {
+    dispatch(setLoading({ key: 'statusUpdate', value: false }));
   }
 };
 
@@ -617,29 +626,122 @@ export const sendNewEmail = (email, subject, htmlBody, ccRecipients = '', bccRec
 };
 
 export const updateMessage = (inboxId, messageId, status, queryType = '', resolvedBy = '') => async (dispatch, getState) => {
+  dispatch(setLoading({ key: 'statusUpdate', value: true }));
   try {
     const state = getState().global;
+    const oldStatus = state.selectedInbox?._id === inboxId ? state.selectedInbox?.status : null;
+    
+    // Call API and wait for response
     const result = await apiService.updateInbox({ inboxId, messageId, status, queryType, resolvedBy });
+    
+    // Apply backend controller logic to update inbox status based on message status change
+    const updateInboxFromMessage = (inbox) => {
+      if (!inbox) return inbox;
+      const copy = { ...inbox };
+      copy.total = copy.total ? { ...copy.total } : { read: 0, unread: 0 };
+
+      if (status === 'read') {
+        // message.status = 'read'
+        if ((copy.total.unread || 0) === 1 && (copy.whatsappStatus === 'read' || !copy.whatsappStatus)) {
+          copy.status = 'read';
+        }
+        copy.total.read = (copy.total.read || 0) + 1;
+        copy.total.unread = Math.max(0, (copy.total.unread || 0) - 1);
+      }
+      else if (status === 'unread') {
+        // message.status = 'unread'
+        copy.total.unread = (copy.total.unread || 0) + 1;
+        copy.total.read = Math.max(0, (copy.total.read || 0) - 1);
+        copy.status = 'unread';
+      }
+      else if (status === 'ignore') {
+        // message.status = undefined
+        if ((copy.total.unread || 0) === 1) {
+          if ((copy.total.read || 0) === 0) {
+            if (copy.whatsappStatus) {
+              copy.status = copy.whatsappStatus;
+            } else {
+              if (['resolved','read'].includes(copy.status)) {
+                copy.status = copy.status;
+              } else {
+                copy.status = 'read';
+              }
+            }
+          } else if ((copy.total.read || 0) > 0) {
+            if (['unread','read'].includes(copy.whatsappStatus)) {
+              copy.status = copy.whatsappStatus;
+            } else {
+              copy.status = 'read';
+            }
+          }
+        }
+        copy.total.unread = Math.max(0, (copy.total.unread || 0) - 1);
+      }
+      else if (status === 'resolved') {
+        // message.status = 'resolved'
+        copy.queryType = queryType || copy.queryType;
+
+        if ((copy.total.read || 0) === 1) {
+          if ((copy.total.unread || 0) === 0) {
+            if (copy.whatsappStatus) {
+              if (copy.whatsappStatus === 'resolved') {
+                copy.source = '';
+              }
+              copy.status = copy.whatsappStatus;
+            } else {
+              copy.status = 'resolved';
+              copy.source = '';
+            }
+          }
+        }
+        copy.total.read = Math.max(0, (copy.total.read || 0) - 1);
+      }
+
+      return copy;
+    };
+
+    // Update message status
+    dispatch(setMessages(state.messages.map(msg =>
+      msg._id === messageId ? { ...msg, status: status === 'ignore' ? undefined : status, ...(queryType ? { queryType } : {}), ...(resolvedBy ? { resolvedBy } : {}) } : msg
+    )));
+
+    // Apply backend logic to inbox
+    const currentInbox = state.inboxes.find(i => i._id === inboxId);
+    if (currentInbox) {
+      const updatedInbox = updateInboxFromMessage(currentInbox);
+      dispatch(setInboxes(state.inboxes.map(i => i._id === inboxId ? updatedInbox : i)));
+      dispatch(setAllInboxes(state.allInboxes.map(i => i._id === inboxId ? updatedInbox : i)));
+      if (state.selectedInbox?._id === inboxId) {
+        dispatch(setSelectedInbox(updatedInbox));
+      }
+    }
+
+    // Also apply server-provided updates if present
     const updatedMsg = result?.message || result?.data || null;
     if (updatedMsg && (updatedMsg._id || updatedMsg.id)) {
       const mid = updatedMsg._id || updatedMsg.id;
-      dispatch(setMessages(state.messages.map(msg => msg._id === mid ? { ...msg, ...updatedMsg } : msg)));
-    } else {
-      dispatch(setMessages(state.messages.map(msg =>
-        msg._id === messageId
-          ? { ...msg, status, ...(queryType && { queryType }) }
-          : msg
-      )));
+      dispatch(setMessages(getState().global.messages.map(msg => msg._id === mid ? { ...msg, ...updatedMsg } : msg)));
     }
+
     const inboxUpdate = result?.inbox || result?.updatedInbox || null;
     const inboxIdFromResp = inboxUpdate?._id || result?.inboxId || inboxId;
     if (inboxUpdate || result?.inboxId) {
-      dispatch(setInboxes(state.inboxes.map(i => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i)));
-      dispatch(setAllInboxes(state.allInboxes.map(i => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i)));
-      if (state.selectedInbox?._id === inboxIdFromResp) {
-        dispatch(setSelectedInbox({ ...state.selectedInbox, ...(inboxUpdate || {}) }));
+      dispatch(setInboxes(getState().global.inboxes.map(i => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i)));
+      dispatch(setAllInboxes(getState().global.allInboxes.map(i => i._id === inboxIdFromResp ? { ...i, ...(inboxUpdate || {}) } : i)));
+      if (getState().global.selectedInbox?._id === inboxIdFromResp) {
+        dispatch(setSelectedInbox({ ...getState().global.selectedInbox, ...(inboxUpdate || {}) }));
       }
     }
+
+    const newState = getState().global;
+    const newInbox = newState.selectedInbox;
+    if (newInbox && oldStatus && oldStatus !== newInbox.status && newInbox.status) {
+      const currentFilter = newState.activeFilter;
+      if (currentFilter !== newInbox.status) {
+        dispatch(setActiveFilter(newInbox.status));
+      }
+    }
+
     try {
       dispatch(showToast({ text: 'Message updated', type: 'success' }));
       setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
@@ -652,6 +754,8 @@ export const updateMessage = (inboxId, messageId, status, queryType = '', resolv
       setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
     } catch(e){}
     throw error;
+  } finally {
+    dispatch(setLoading({ key: 'statusUpdate', value: false }));
   }
 };
 
