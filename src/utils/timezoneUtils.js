@@ -57,13 +57,35 @@ export const formatDateIST = (date) => {
   const parsed = new Date(date);
 
   // Validate the date
-  if (isNaN(parsed.getTime()) || parsed.getFullYear() < 2020) {
-    return String(date);
-  }
-
-  return parsed.toLocaleString('en-IN', {
+  if (isNaN(parsed.getTime())) return '';
+  // Use Intl to get components in IST timezone, then build a clear format.
+  const fmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: IST_TIMEZONE,
-    dateStyle: 'medium',
-    timeStyle: 'medium',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
   });
+
+  const parts = fmt.formatToParts(parsed).reduce((acc, p) => {
+    if (p.type && p.value) acc[p.type] = p.value;
+    return acc;
+  }, {});
+
+  const day = parts.day || '00';
+  const month = parts.month || '00';
+  const year = parts.year || '0000';
+  const hour24 = parts.hour || '00';
+  const minute = parts.minute || '00';
+  const second = parts.second || '00';
+
+  // Determine AM/PM based on 24-hour hour in IST
+  const hourNum = Number(hour24);
+  const ampm = (!isNaN(hourNum) && hourNum >= 12) ? 'PM' : 'AM';
+
+  // Format: DD/MM/YYYY, HH:mm:ss AM/PM (24-hour number with AM/PM appended)
+  return `${day}/${month}/${year}, ${hour24}:${minute}:${second} ${ampm}`;
 };
