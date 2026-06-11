@@ -1,4 +1,4 @@
-const BASE_URL = 'https://sadmin-api.onference.in/support';
+const BASE_URL = 'https://cms-api.onference.in/support';
 
 class ApiService {
   async request(endpoint, options = {}) {

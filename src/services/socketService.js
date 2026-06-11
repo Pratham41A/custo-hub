@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 // For socket events we interact with the redux store directly
 import { store, handleInboxUpdated, handleInboxCreated } from '../store/globalStore';
 
-const SOCKET_URL = 'https://sadmin-api.onference.in';
+const SOCKET_URL = 'https://cms-api.onference.in';
 
 class SocketService {
   socket = null;
@@ -79,7 +79,7 @@ class SocketService {
     this.initAudioContext();
 
     this.socket = io(SOCKET_URL, {
-      transports: ['websockets'],
+      transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
