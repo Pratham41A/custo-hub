@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useGlobalStore } from '../store/globalStore';
 import { apiService } from '../services/apiService';
 import { convertISTtoUTC, formatDateIST } from '../utils/timezoneUtils';
@@ -9,6 +9,7 @@ import { OutlookEditor } from '../components/OutlookEditor';
 import { WhatsAppEditor } from '../components/WhatsAppEditor';
 import { WhatsAppTemplateSelector } from '../components/WhatsAppTemplateSelector';
 import MessageBubble from '../components/MessageBubble';
+import { PaginationControls } from '../components/PaginationControls';
 
 // Backward compatibility wrapper - uses the new utility function
 const formatDate = (date) => formatDateIST(date);
@@ -57,6 +58,14 @@ export default function InboxPage() {
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [modal, setModal] = useState({ type: null, data: {} });
   const [search, setSearch] = useState('');
+  const [inboxPage, setInboxPage] = useState(1);
+  const [inboxPageSize, setInboxPageSize] = useState(10);
+  const [inboxPagination, setInboxPagination] = useState({ page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false });
+  const [inboxError, setInboxError] = useState('');
+  const [messagePage, setMessagePage] = useState(1);
+  const [messagePageSize, setMessagePageSize] = useState(10);
+  const [messagePagination, setMessagePagination] = useState({ page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false });
+  const [messageError, setMessageError] = useState('');
   const toast = useGlobalStore(state => state.toast);
   const showToast = useGlobalStore(state => state.showToast);
   const [sending, setSending] = useState(false);
@@ -68,9 +77,13 @@ export default function InboxPage() {
   const messagesEndRef = useRef(null);
   const messageRefsMap = useRef({});
   const replyDraftTimeoutRef = useRef(null);
+  const inboxListRef = useRef(null);
+  const messageListRef = useRef(null);
+  const loadingMoreRef = useRef(false);
+  const preserveMessageScrollRef = useRef(false);
+  const savedMessageScrollTopRef = useRef(0);
 
   useEffect(() => { 
-    loadInboxes();
     const selectedStillVisible = selectedInbox && (
       activeFilter === 'all' || selectedInbox.status === activeFilter
     );
@@ -79,6 +92,10 @@ export default function InboxPage() {
       setSelectedInbox(null);
       setShowContextPanel(false);
     }
+
+    setInboxPage(1);
+    setInboxError('');
+    loadInboxes(1, inboxPageSize);
   }, [activeFilter]);
 
   // Progressive load: Show read/unread inboxes first, then all inboxes in background
@@ -375,15 +392,30 @@ export default function InboxPage() {
     };
   }, []);
 
-  const loadInboxes = async () => {
+  const loadInboxes = useCallback(async (page = inboxPage, limit = inboxPageSize, append = false) => {
+    if (loadingMoreRef.current && append) return;
+    setInboxError('');
     try {
-      // Use local filtering from the cached allInboxes
-      const filtered = getFilteredInboxes();
-      setInboxes(filtered);
-    } catch {
+      const result = await fetchInboxes({
+        status: activeFilter === 'all' ? '' : activeFilter,
+        page,
+        limit,
+        append,
+        forceFetch: true,
+      });
+      const paginationMeta = result?.pagination || { page, limit, totalCount: 0, totalPages: 1, hasMore: false };
+      setInboxPagination({
+        ...paginationMeta,
+        page: Number(paginationMeta.page) || page,
+        limit: Number(paginationMeta.limit) || limit,
+      });
+      setInboxPage(Number(paginationMeta.page) || page);
+      setInboxPageSize(Number(paginationMeta.limit) || limit);
+    } catch (error) {
+      setInboxError(error?.message || 'Failed to load inboxes');
       showToast('Failed to load inboxes', 'error');
     }
-  };
+  }, [activeFilter, fetchInboxes, inboxPage, inboxPageSize, showToast]);
 
   // Using global `showToast` from store
 
@@ -663,28 +695,30 @@ export default function InboxPage() {
       return mInboxId === selectedId && !m.isDraft;
     })
     .sort((a, b) => {
-      const timeA = new Date(a.messageDateTime || a.createdAt).getTime();
-      const timeB = new Date(b.messageDateTime || b.createdAt).getTime();
-      return timeA - timeB; // Oldest first (ascending) - latest at bottom
+      const timeA = new Date(a.messageDateTime || a.createdAt || 0).getTime();
+      const timeB = new Date(b.messageDateTime || b.createdAt || 0).getTime();
+      return timeB - timeA; // Newest first, older pages appear below
     });
 
   const prevMessagesLenRef = React.useRef(inboxMessages.length);
   const prevInboxIdRef = React.useRef(selectedInbox?._id);
 
   useEffect(() => {
-    const prevLen = prevMessagesLenRef.current;
-    const prevInboxId = prevInboxIdRef.current;
-    const currentLen = inboxMessages.length;
-    const currentInboxId = selectedInbox?._id;
+    prevMessagesLenRef.current = inboxMessages.length;
+    prevInboxIdRef.current = selectedInbox?._id;
+  }, [inboxMessages.length, selectedInbox?._id]);
 
-    // Scroll only when switching inbox or when new messages are appended
-    if (prevInboxId !== currentInboxId || currentLen > prevLen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+  useLayoutEffect(() => {
+    if (!preserveMessageScrollRef.current) return;
 
-    prevMessagesLenRef.current = currentLen;
-    prevInboxIdRef.current = currentInboxId;
-  }, [inboxMessages, selectedInbox]);
+    const node = messageListRef.current;
+    if (!node) return;
+
+    requestAnimationFrame(() => {
+      node.scrollTop = savedMessageScrollTopRef.current;
+      preserveMessageScrollRef.current = false;
+    });
+  }, [inboxMessages.length, selectedInbox?._id]);
 
   // Load draft messages into reply form when messages are fetched
   useEffect(() => {
@@ -767,6 +801,27 @@ export default function InboxPage() {
     }
   }, [messages, selectedInbox?._id]);
 
+  const handleInboxPageChange = useCallback(async (nextPage) => {
+    const safePage = Math.max(1, Number(nextPage) || 1);
+    if (loadingMoreRef.current || loading.inboxes || safePage === inboxPagination.page) return;
+    loadingMoreRef.current = true;
+    setInboxError('');
+    try {
+      console.log('[inbox-list][page-change]', { from: inboxPagination.page, to: safePage, limit: inboxPageSize });
+      await loadInboxes(safePage, inboxPageSize, false);
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [inboxPageSize, inboxPagination.page, loadInboxes, loading.inboxes]);
+
+  const handlePreviousInboxes = useCallback(() => {
+    handleInboxPageChange((inboxPagination.page || 1) - 1);
+  }, [handleInboxPageChange, inboxPagination.page]);
+
+  const handleNextInboxes = useCallback(() => {
+    handleInboxPageChange((inboxPagination.page || 1) + 1);
+  }, [handleInboxPageChange, inboxPagination.page]);
+
   const handleInboxClick = async (inbox) => {
     // Toggle selection: if clicking same inbox, deselect and hide panel
     if (selectedInbox?._id === inbox._id) {
@@ -778,8 +833,17 @@ export default function InboxPage() {
     // Select new inbox and hide context panel by default
     setSelectedInbox(inbox);
     setShowContextPanel(false);
+    setMessagePage(1);
+    setMessagePagination({ page: 1, limit: messagePageSize, totalCount: 0, totalPages: 1, hasMore: false });
+    setMessageError('');
     try {
-      await fetchMessages(inbox._id);
+      const result = await fetchMessages(inbox._id, { page: 1, limit: messagePageSize, append: false });
+      const paginationMeta = result?.pagination || { page: 1, limit: messagePageSize, totalCount: 0, totalPages: 1, hasMore: false };
+      setMessagePagination({
+        ...paginationMeta,
+        page: Number(paginationMeta.page) || 1,
+        limit: Number(paginationMeta.limit) || messagePageSize,
+      });
       // If this inbox is from WhatsApp, mark it as read on open (only if currently unread)
       try {
         if (inbox?.source === 'whatsapp' && inbox?.status === 'unread') {
@@ -790,6 +854,80 @@ export default function InboxPage() {
         console.error('Failed to mark WhatsApp inbox read:', e);
       }
     } catch (error) {
+      setMessageError(error?.message || 'Failed to load messages');
+      showToast('Failed to load messages', 'error');
+    }
+  };
+
+  const handleMessagePageChange = async (page) => {
+    if (!selectedInbox?._id) return;
+    setMessagePage(page);
+    setMessageError('');
+    try {
+      const result = await fetchMessages(selectedInbox._id, { page, limit: messagePageSize, append: false });
+      const paginationMeta = result?.pagination || { page, limit: messagePageSize, totalCount: 0, totalPages: 1, hasMore: false };
+      setMessagePagination({
+        ...paginationMeta,
+        page: Number(paginationMeta.page) || page,
+        limit: Number(paginationMeta.limit) || messagePageSize,
+      });
+    } catch (error) {
+      setMessageError(error?.message || 'Failed to load messages');
+      showToast('Failed to load messages', 'error');
+    }
+  };
+
+  const loadNextMessages = useCallback(() => {
+    if (!selectedInbox?._id || !messagePagination.hasMore || loadingMoreRef.current || loading.messages) return;
+
+    const node = messageListRef.current;
+    if (node) {
+      savedMessageScrollTopRef.current = node.scrollTop;
+      preserveMessageScrollRef.current = true;
+    }
+
+    const nextPage = (messagePagination.page || 1) + 1;
+    loadingMoreRef.current = true;
+    setMessagePage(nextPage);
+    fetchMessages(selectedInbox._id, { page: nextPage, limit: messagePageSize, append: true }).then((result) => {
+      const paginationMeta = result?.pagination || { page: nextPage, limit: messagePageSize, totalCount: 0, totalPages: 1, hasMore: false };
+      setMessagePagination({
+        ...paginationMeta,
+        page: Number(paginationMeta.page) || nextPage,
+        limit: Number(paginationMeta.limit) || messagePageSize,
+      });
+    }).catch((error) => {
+      setMessageError(error?.message || 'Failed to load messages');
+      showToast('Failed to load messages', 'error');
+    }).finally(() => {
+      loadingMoreRef.current = false;
+    });
+  }, [fetchMessages, loading.messages, messagePageSize, messagePagination.hasMore, messagePagination.page, selectedInbox?._id, showToast]);
+
+  const handleMessageScroll = useCallback(() => {
+    const node = messageListRef.current;
+    if (!node) return;
+    const nearBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 24;
+    if (nearBottom) {
+      loadNextMessages();
+    }
+  }, [loadNextMessages]);
+
+  const handleMessagePageSizeChange = async (size) => {
+    if (!selectedInbox?._id) return;
+    setMessagePageSize(size);
+    setMessagePage(1);
+    setMessageError('');
+    try {
+      const result = await fetchMessages(selectedInbox._id, { page: 1, limit: size, append: false });
+      const paginationMeta = result?.pagination || { page: 1, limit: size, totalCount: 0, totalPages: 1, hasMore: false };
+      setMessagePagination({
+        ...paginationMeta,
+        page: Number(paginationMeta.page) || 1,
+        limit: Number(paginationMeta.limit) || size,
+      });
+    } catch (error) {
+      setMessageError(error?.message || 'Failed to load messages');
       showToast('Failed to load messages', 'error');
     }
   };
@@ -1073,7 +1211,7 @@ export default function InboxPage() {
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setInboxPage(1); }}
                 placeholder="Search"
                 style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
               />
@@ -1101,18 +1239,21 @@ export default function InboxPage() {
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {statusFilters.map((f) => (
-                <button key={f.value} style={filterBtnStyle(activeFilter === f.value)} onClick={() => setActiveFilter(f.value)}>
+                <button key={f.value} style={filterBtnStyle(activeFilter === f.value)} onClick={() => { setActiveFilter(f.value); setInboxPage(1); }}>
                   {f.label}
                 </button>
               ))}
             </div>
           </div>
 
-          <div style={{ flex: 1, overflow: 'auto', padding: '12px' }}>
+          <div ref={inboxListRef} style={{ flex: 1, overflow: 'auto', padding: '12px' }}>
             {loading.inboxes ? (
               <div style={{ textAlign: 'center', padding: '40px' }}><span className="spinner" /></div>
+            ) : inboxError ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#ef4444', fontSize: '13px' }}>{inboxError}</div>
             ) : filteredInboxes.length === 0 ? (
-              <div >
+              <div style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '13px' }}>
+                No inboxes match the current filters.
               </div>
             ) : (
               filteredInboxes.map((inbox) => {
@@ -1252,6 +1393,18 @@ export default function InboxPage() {
                 );
               })
             )}
+            {!loading.inboxes && !inboxError && (
+              <PaginationControls
+                currentPage={inboxPagination.page}
+                totalPages={inboxPagination.totalPages}
+                totalCount={inboxPagination.totalCount}
+                isLoading={loading.inboxes}
+                label="inboxes"
+                hasMore={inboxPagination.hasMore}
+                onPrev={handlePreviousInboxes}
+                onNext={handleNextInboxes}
+              />
+            )}
           </div>
         </div>
 
@@ -1319,9 +1472,11 @@ export default function InboxPage() {
                 <div style={{ height: '2px', background: '#0066cc', animation: 'pulse 1s infinite' }} />
               )}
 
-              <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+              <div ref={messageListRef} onScroll={handleMessageScroll} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
                 {loading.messages ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}><span className="spinner" /></div>
+                ) : messageError ? (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#ef4444', fontSize: '13px' }}>{messageError}</div>
                 ) : (
                   <>
                     {inboxMessages.map((msg) => (
@@ -1344,6 +1499,14 @@ export default function InboxPage() {
                       </div>
                     ))}
                     <div ref={messagesEndRef} />
+                    <PaginationControls
+                      currentPage={messagePagination.page}
+                      totalPages={messagePagination.totalPages}
+                      totalCount={messagePagination.totalCount}
+                      isLoading={loading.messages}
+                      label="messages"
+                      hasMore={messagePagination.hasMore}
+                    />
                   </>
                 )}
               </div>

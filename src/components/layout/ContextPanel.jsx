@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useGlobalStore } from '../../store/globalStore';
 import { formatDateIST } from '../../utils/timezoneUtils';
+import { PaginationControls } from '../PaginationControls';
 
 // Backward compatibility wrapper - uses the new utility function
 const formatDate = (date) => formatDateIST(date);
@@ -18,7 +19,15 @@ export function ContextPanel({ inbox, onClose }) {
   const fetchResolutions = useGlobalStore(state => state.fetchResolutions);
   const [activeModal, setActiveModal] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
-  const [pagination, setPagination] = useState({});
+  const [modalError, setModalError] = useState('');
+  const loadingMoreRef = useRef(false);
+  const [paginationState, setPaginationState] = useState({
+    subscription: { page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false },
+    payment: { page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false },
+    view: { page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false },
+    notes: { page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false },
+    resolutions: { page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false },
+  });
 
   if (!inbox) return null;
 
@@ -55,29 +64,60 @@ export function ContextPanel({ inbox, onClose }) {
     return fields;
   };
 
-  const loadDataForModal = async (type) => {
-    if (!userId) return;
+  const loadDataForModal = useCallback(async (type, page = 1, limit = 10, append = false) => {
+    if (!userId || (append && (loadingData || loadingMoreRef.current))) return;
+    loadingMoreRef.current = append;
     setLoadingData(true);
+    setModalError('');
     try {
       let result;
-      if (type === 'subscription') result = await fetchUserSubscriptions(userId, 20);
-      if (type === 'payment') result = await fetchUserPayments(userId, 20);
-      if (type === 'view') result = await fetchUserViews(userId, 20);
-      if (type === 'notes') result = await fetchUserActivities(inboxId, 20);
+      if (type === 'subscription') result = await fetchUserSubscriptions(userId, { page, limit, append });
+      if (type === 'payment') result = await fetchUserPayments(userId, { page, limit, append });
+      if (type === 'view') result = await fetchUserViews(userId, { page, limit, append });
+      if (type === 'notes') result = await fetchUserActivities(inboxId, { page, limit, append });
       if (type === 'resolutions') {
-        const cached = resolutionsByInbox?.[inboxId];
-        const list = (cached && Array.isArray(cached)) ? cached : await fetchResolutions(inboxId);
-        result = { data: list, pagination: null };
+        const shouldUseCached = !append && page === 1 && Array.isArray(resolutionsByInbox?.[inboxId]) && resolutionsByInbox[inboxId].length > 0;
+        const response = shouldUseCached
+          ? { data: resolutionsByInbox[inboxId], pagination: { page: 1, limit, totalCount: resolutionsByInbox[inboxId].length, totalPages: 1, hasMore: false } }
+          : await fetchResolutions(inboxId, { page, limit, append });
+        result = response;
       }
-      if (result?.pagination) setPagination(result.pagination);
+      const paginationMeta = result?.pagination || { page, limit, totalCount: 0, totalPages: 1, hasMore: false };
+      const resolvedMeta = {
+        ...paginationMeta,
+        page: Number(paginationMeta.page) || page,
+        limit: Number(paginationMeta.limit) || limit,
+        totalCount: Number(paginationMeta.totalCount) || 0,
+        totalPages: Number(paginationMeta.totalPages) || 1,
+        hasMore: Boolean(paginationMeta.hasMore),
+      };
+      setPaginationState((prev) => ({ ...prev, [type]: { ...prev[type], ...resolvedMeta } }));
+    } catch (error) {
+      setModalError(error?.message || 'Failed to load data');
+      setPaginationState((prev) => ({ ...prev, [type]: { ...prev[type], page, limit, totalCount: 0, totalPages: 1, hasMore: false } }));
     } finally {
       setLoadingData(false);
+      loadingMoreRef.current = false;
     }
-  };
+  }, [fetchUserActivities, fetchUserPayments, fetchUserSubscriptions, fetchUserViews, inboxId, loadingData, resolutionsByInbox, userId, fetchResolutions]);
 
   const handleOpenModal = (type) => {
     setActiveModal(type);
-    loadDataForModal(type);
+    loadDataForModal(type, 1, 10, false);
+  };
+
+  const handleModalScroll = (type, event) => {
+    const node = event.currentTarget;
+    const currentState = paginationState[type] || { page: 1, limit: 10, hasMore: false };
+    if (!node || loadingData || !currentState?.hasMore) return;
+    const nearBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 160;
+    if (nearBottom) {
+      const nextPage = (currentState?.page || 1) + 1;
+      const shouldLoad = currentState?.page < 999 && currentState?.limit > 0;
+      if (!shouldLoad) return;
+      console.log('[context-panel][load-more]', { type, currentPage: currentState?.page, nextPage, hasMore: currentState?.hasMore, limit: currentState?.limit });
+      loadDataForModal(type, nextPage, currentState?.limit || 10, true);
+    }
   };
 
   const dataItems = [
@@ -87,6 +127,17 @@ export function ContextPanel({ inbox, onClose }) {
     { key: 'notes', label: 'Notes' },
     { key: 'resolutions', label: 'Resolutions' },
   ];
+
+  const getSectionItems = (type) => {
+    if (type === 'subscription') return Array.isArray(subscriptions) ? subscriptions : [];
+    if (type === 'payment') return Array.isArray(payments) ? payments : [];
+    if (type === 'view') return Array.isArray(views) ? views : [];
+    if (type === 'notes') return Array.isArray(notes) ? notes : [];
+    if (type === 'resolutions') return Array.isArray(resolutionsByInbox?.[inboxId]) ? resolutionsByInbox[inboxId] : [];
+    return [];
+  };
+
+  const getSectionPagination = (type) => paginationState[type] || { page: 1, limit: 10, totalCount: 0, totalPages: 1, hasMore: false };
 
   // Styles
   const panelStyle = {
@@ -286,47 +337,59 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Subscriptions - {getDisplayName()} ({Array.isArray(subscriptions) ? subscriptions.length : 0})</span>
+              <span>Subscriptions - {getDisplayName()} ({getSectionPagination('subscription').totalCount || getSectionItems('subscription').length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
-            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
-              {loadingData ? (
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }} onScroll={(event) => handleModalScroll('subscription', event)}>
+              {loadingData && getSectionItems('subscription').length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : modalError ? (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#ef4444', fontSize: '13px' }}>{modalError}</div>
               ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Package</th>
-                      <th style={thStyle}>Duration</th>
-                      <th style={thStyle}>Amount</th>
-                      <th style={thStyle}>Status</th>
-                      <th style={thStyle}>End Date</th>
-                      <th style={thStyle}>Method</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(Array.isArray(subscriptions) ? subscriptions : []).map((sub) => {
-                      const duration = sub.packageId?.subscriptionDurationWeb || '-';
-                      return (
-                        <tr key={sub._id}>
-                          <td style={tdStyle}>{sub.packageId?.packageName || '-'}</td>
-                          <td style={tdStyle}>{duration} months</td>
-                          <td style={tdStyle}>{sub.currencytype} {sub.amountpaid || 0}</td>
-                          <td style={tdStyle}>
-                            <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: sub.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: sub.status === 'active' ? '#10b981' : '#ef4444', textTransform: 'capitalize' }}>
-                              {sub.status}
-                            </span>
-                          </td>
-                          <td style={tdStyle}>{formatDate(sub.endDate)}</td>
-                          <td style={tdStyle}>{sub.paymentmethod || '-'}</td>
-                        </tr>
-                      );
-                    })}
-                    {(!Array.isArray(subscriptions) || subscriptions.length === 0) && (
-                      <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No subscriptions</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                <>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Package</th>
+                        <th style={thStyle}>Duration</th>
+                        <th style={thStyle}>Amount</th>
+                        <th style={thStyle}>Status</th>
+                        <th style={thStyle}>End Date</th>
+                        <th style={thStyle}>Method</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getSectionItems('subscription').map((sub) => {
+                        const duration = sub.packageId?.subscriptionDurationWeb || '-';
+                        return (
+                          <tr key={sub._id}>
+                            <td style={tdStyle}>{sub.packageId?.packageName || '-'}</td>
+                            <td style={tdStyle}>{duration} months</td>
+                            <td style={tdStyle}>{sub.currencytype} {sub.amountpaid || 0}</td>
+                            <td style={tdStyle}>
+                              <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: sub.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: sub.status === 'active' ? '#10b981' : '#ef4444', textTransform: 'capitalize' }}>
+                                {sub.status}
+                              </span>
+                            </td>
+                            <td style={tdStyle}>{formatDate(sub.endDate)}</td>
+                            <td style={tdStyle}>{sub.paymentmethod || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                      {getSectionItems('subscription').length === 0 && (
+                        <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No subscriptions</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <PaginationControls
+                    currentPage={getSectionPagination('subscription').page}
+                    totalPages={getSectionPagination('subscription').totalPages}
+                    totalCount={getSectionPagination('subscription').totalCount}
+                    isLoading={loadingData}
+                    label="subscriptions"
+                    hasMore={getSectionPagination('subscription').hasMore}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -338,38 +401,50 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Payments - {getDisplayName()} ({Array.isArray(payments) ? payments.length : 0})</span>
+              <span>Payments - {getDisplayName()} ({getSectionPagination('payment').totalCount || getSectionItems('payment').length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
-            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
-              {loadingData ? (
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }} onScroll={(event) => handleModalScroll('payment', event)}>
+              {loadingData && getSectionItems('payment').length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : modalError ? (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#ef4444', fontSize: '13px' }}>{modalError}</div>
               ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Course</th>
-                      <th style={thStyle}>Amount</th>
-                      <th style={thStyle}>Payment Method</th>
-                      <th style={thStyle}>Date</th>
-                      <th style={thStyle}>Coupon</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(Array.isArray(payments) ? payments : []).map((p) => (
-                      <tr key={p._id}>
-                        <td style={tdStyle}>{p.coursename || p.courseid?.coursename || '-'}</td>
-                        <td style={tdStyle}>{p.currencytype} {p.amountpaid || 0}</td>
-                        <td style={tdStyle}>{p.paymentmethod || '-'}</td>
-                        <td style={tdStyle}>{formatDate(p.whenentered)}</td>
-                        <td style={tdStyle}>{p.couponcode || '-'}</td>
+                <>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Course</th>
+                        <th style={thStyle}>Amount</th>
+                        <th style={thStyle}>Payment Method</th>
+                        <th style={thStyle}>Date</th>
+                        <th style={thStyle}>Coupon</th>
                       </tr>
-                    ))}
-                    {(!Array.isArray(payments) || payments.length === 0) && (
-                      <tr><td colSpan={5} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No payments</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {getSectionItems('payment').map((p) => (
+                        <tr key={p._id}>
+                          <td style={tdStyle}>{p.coursename || p.courseid?.coursename || '-'}</td>
+                          <td style={tdStyle}>{p.currencytype} {p.amountpaid || 0}</td>
+                          <td style={tdStyle}>{p.paymentmethod || '-'}</td>
+                          <td style={tdStyle}>{formatDate(p.whenentered)}</td>
+                          <td style={tdStyle}>{p.couponcode || '-'}</td>
+                        </tr>
+                      ))}
+                      {getSectionItems('payment').length === 0 && (
+                        <tr><td colSpan={5} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No payments</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <PaginationControls
+                    currentPage={getSectionPagination('payment').page}
+                    totalPages={getSectionPagination('payment').totalPages}
+                    totalCount={getSectionPagination('payment').totalCount}
+                    isLoading={loadingData}
+                    label="payments"
+                    hasMore={getSectionPagination('payment').hasMore}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -381,47 +456,59 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Views - {getDisplayName()} ({Array.isArray(views) ? views.length : 0})</span>
+              <span>Views - {getDisplayName()} ({getSectionPagination('view').totalCount || getSectionItems('view').length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
-            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
-              {loadingData ? (
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }} onScroll={(event) => handleModalScroll('view', event)}>
+              {loadingData && getSectionItems('view').length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : modalError ? (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#ef4444', fontSize: '13px' }}>{modalError}</div>
               ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Course</th>
-                      <th style={thStyle}>Sub Course</th>
-                      <th style={thStyle}>Views</th>
-                      <th style={thStyle}>Video Duration</th>
-                      <th style={thStyle}>Progress %</th>
-                      <th style={thStyle}>Device</th>
-                      <th style={thStyle}>Last Seen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Array.isArray(views) && views.map((v) => {
-                      const rawVal = v?.percentvideoplay;
-                      const parsed = rawVal != null && rawVal !== '' ? Number(rawVal) : NaN;
-                      const pct = !isNaN(parsed) ? parsed : null;
-                      return (
-                        <tr key={v._id}>
-                          <td style={tdStyle}>{v.courseid?.coursename || '-'}</td>
-                          <td style={tdStyle}>{v.subcourseid?.name || '-'}</td>
-                          <td style={tdStyle}>{v.courseid?.views || '0'}</td>
-                          <td style={tdStyle}>{v.durationofvideo || '-'}</td>
-                          <td style={tdStyle}>{pct != null ? `${pct.toFixed(2)}%` : '-'}</td>
-                          <td style={tdStyle}>{v.devices || '-'}</td>
-                          <td style={tdStyle}>{formatDate(v.lastseen)}</td>
-                        </tr>
-                      );
-                    })}
-                    {(!Array.isArray(views) || views.length === 0) && (
-                      <tr><td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No views</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                <>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Course</th>
+                        <th style={thStyle}>Sub Course</th>
+                        <th style={thStyle}>Views</th>
+                        <th style={thStyle}>Video Duration</th>
+                        <th style={thStyle}>Progress %</th>
+                        <th style={thStyle}>Device</th>
+                        <th style={thStyle}>Last Seen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getSectionItems('view').map((v) => {
+                        const rawVal = v?.percentvideoplay;
+                        const parsed = rawVal != null && rawVal !== '' ? Number(rawVal) : NaN;
+                        const pct = !isNaN(parsed) ? parsed : null;
+                        return (
+                          <tr key={v._id}>
+                            <td style={tdStyle}>{v.courseid?.coursename || '-'}</td>
+                            <td style={tdStyle}>{v.subcourseid?.name || '-'}</td>
+                            <td style={tdStyle}>{v.courseid?.views || '0'}</td>
+                            <td style={tdStyle}>{v.durationofvideo || '-'}</td>
+                            <td style={tdStyle}>{pct != null ? `${pct.toFixed(2)}%` : '-'}</td>
+                            <td style={tdStyle}>{v.devices || '-'}</td>
+                            <td style={tdStyle}>{formatDate(v.lastseen)}</td>
+                          </tr>
+                        );
+                      })}
+                      {getSectionItems('view').length === 0 && (
+                        <tr><td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No views</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <PaginationControls
+                    currentPage={getSectionPagination('view').page}
+                    totalPages={getSectionPagination('view').totalPages}
+                    totalCount={getSectionPagination('view').totalCount}
+                    isLoading={loadingData}
+                    label="views"
+                    hasMore={getSectionPagination('view').hasMore}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -433,34 +520,46 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={{ ...modalStyle, maxWidth: '1000px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Notes - {getDisplayName()} ({Array.isArray(notes) ? notes.length : 0})</span>
+              <span>Notes - {getDisplayName()} ({getSectionPagination('notes').totalCount || getSectionItems('notes').length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
-            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
-              {loadingData ? (
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }} onScroll={(event) => handleModalScroll('notes', event)}>
+              {loadingData && getSectionItems('notes').length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : modalError ? (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#ef4444', fontSize: '13px' }}>{modalError}</div>
               ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Note</th>
-                      <th style={thStyle}>Due Date</th>
-                      <th style={thStyle}>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Array.isArray(notes) && notes.map((n) => (
-                      <tr key={n._id}>
-                        <td style={tdStyle}>{n.body}</td>
-                        <td style={tdStyle}>{formatDate(n.dueDate)}</td>
-                        <td style={tdStyle}>{formatDate(n.createdAt)}</td>
+                <>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Note</th>
+                        <th style={thStyle}>Due Date</th>
+                        <th style={thStyle}>Created</th>
                       </tr>
-                    ))}
-                    {(!Array.isArray(notes) || notes.length === 0) && (
-                      <tr><td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No notes</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {getSectionItems('notes').map((n) => (
+                        <tr key={n._id}>
+                          <td style={tdStyle}>{n.body}</td>
+                          <td style={tdStyle}>{formatDate(n.dueDate)}</td>
+                          <td style={tdStyle}>{formatDate(n.createdAt)}</td>
+                        </tr>
+                      ))}
+                      {getSectionItems('notes').length === 0 && (
+                        <tr><td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No notes</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <PaginationControls
+                    currentPage={getSectionPagination('notes').page}
+                    totalPages={getSectionPagination('notes').totalPages}
+                    totalCount={getSectionPagination('notes').totalCount}
+                    isLoading={loadingData}
+                    label="notes"
+                    hasMore={getSectionPagination('notes').hasMore}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -472,36 +571,48 @@ export function ContextPanel({ inbox, onClose }) {
         <div style={modalOverlayStyle} onClick={() => setActiveModal(null)}>
           <div style={{ ...modalStyle, maxWidth: '1000px' }} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <span>Resolutions - {getDisplayName()} ({Array.isArray(resolutionsByInbox?.[inboxId]) ? resolutionsByInbox[inboxId].length : 0})</span>
+              <span>Resolutions - {getDisplayName()} ({getSectionPagination('resolutions').totalCount || getSectionItems('resolutions').length})</span>
               <button style={closeButtonStyle} onClick={() => setActiveModal(null)}>✕</button>
             </div>
-            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }}>
-              {loadingData ? (
+            <div style={{ padding: '16px', maxHeight: '60vh', overflow: 'auto' }} onScroll={(event) => handleModalScroll('resolutions', event)}>
+              {loadingData && getSectionItems('resolutions').length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
+              ) : modalError ? (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#ef4444', fontSize: '13px' }}>{modalError}</div>
               ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Query Type</th>
-                      <th style={thStyle}>Resolved By</th>
-                      <th style={thStyle}>Source</th>
-                      <th style={thStyle}>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(Array.isArray(resolutionsByInbox?.[inboxId]) ? resolutionsByInbox[inboxId] : []).map((r) => (
-                      <tr key={r._id}>
-                        <td style={tdStyle}>{r.queryType || '-'}</td>
-                        <td style={tdStyle}>{r.resolvedBy || '-'}</td>
-                        <td style={tdStyle}>{r.source || '-'}</td>
-                        <td style={tdStyle}>{formatDate(r.createdAt)}</td>
+                <>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Query Type</th>
+                        <th style={thStyle}>Resolved By</th>
+                        <th style={thStyle}>Source</th>
+                        <th style={thStyle}>Created</th>
                       </tr>
-                    ))}
-                    {(!(Array.isArray(resolutionsByInbox?.[inboxId]) && resolutionsByInbox[inboxId].length > 0)) && (
-                      <tr><td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No resolutions</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {getSectionItems('resolutions').map((r) => (
+                        <tr key={r._id}>
+                          <td style={tdStyle}>{r.queryType || '-'}</td>
+                          <td style={tdStyle}>{r.resolvedBy || '-'}</td>
+                          <td style={tdStyle}>{r.source || '-'}</td>
+                          <td style={tdStyle}>{formatDate(r.createdAt)}</td>
+                        </tr>
+                      ))}
+                      {getSectionItems('resolutions').length === 0 && (
+                        <tr><td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>No resolutions</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <PaginationControls
+                    currentPage={getSectionPagination('resolutions').page}
+                    totalPages={getSectionPagination('resolutions').totalPages}
+                    totalCount={getSectionPagination('resolutions').totalCount}
+                    isLoading={loadingData}
+                    label="resolutions"
+                    hasMore={getSectionPagination('resolutions').hasMore}
+                  />
+                </>
               )}
             </div>
           </div>

@@ -40,6 +40,42 @@ const getMessageIdValue = (value) => {
   return String(value);
 };
 
+const mergeUniqueItems = (existing = [], incoming = []) => {
+  const merged = [];
+  const seen = new Set();
+  const items = [...existing, ...incoming];
+
+  items.forEach((item) => {
+    const key = item?._id || item?.id || item?.messageId || item?.uuid;
+    if (key) {
+      if (seen.has(key)) return;
+      seen.add(key);
+    }
+    merged.push(item);
+  });
+
+  return merged;
+};
+
+const normalizePaginationMeta = (response = {}, fallbackPage = 1, fallbackLimit = 10, fallbackCount = 0) => {
+  const page = Number(response?.page ?? response?.pagination?.page ?? fallbackPage) || 1;
+  const limit = Number(response?.limit ?? response?.pagination?.limit ?? fallbackLimit) || 10;
+  const totalCount = Number(response?.totalCount ?? response?.count ?? response?.total ?? fallbackCount) || 0;
+  const totalPages = Number(response?.totalPages ?? response?.pagination?.totalPages ?? (totalCount > 0 ? Math.ceil(totalCount / limit) : 1)) || 1;
+  const hasMoreFromServer = response?.hasMore ?? response?.pagination?.hasMore;
+  const hasMore = hasMoreFromServer !== undefined && hasMoreFromServer !== null
+    ? Boolean(hasMoreFromServer)
+    : page < totalPages;
+
+  return {
+    page,
+    limit,
+    totalCount,
+    totalPages,
+    hasMore: Boolean(hasMore),
+  };
+};
+
 const findResolutionForMessage = (msg, resolutions = []) => {
   if (!msg || !Array.isArray(resolutions)) return null;
   const messageIds = [msg._id, msg.id, msg.messageId, msg.internetMessageId, msg.outlookMessageId]
@@ -130,7 +166,7 @@ const initialState = {
   selectedInbox: null,
   activeFilter: 'all',
   dateRange: { start: null, end: null },
-  pagination: { skip: 0, limit: 20 },
+  pagination: { skip: 0, limit: 10, page: 1, totalCount: 0, totalPages: 1, hasMore: false },
   // Global toast notification
   toast: { text: '', type: '' },
 };
@@ -153,7 +189,7 @@ const globalSlice = createSlice({
     setSelectedInbox(state, action) { state.selectedInbox = action.payload; },
     setActiveFilter(state, action) { state.activeFilter = action.payload; },
     setDateRange(state, action) { state.dateRange = action.payload; },
-    setPagination(state, action) { state.pagination = action.payload; },
+    setPagination(state, action) { state.pagination = { ...state.pagination, ...action.payload }; },
     setLoading(state, action) {
       const { key, value } = action.payload;
       state.loading[key] = value;
@@ -247,29 +283,36 @@ export const fetchDashboard = (options = {}) => async (dispatch, getState) => {
 };
 
 export const fetchInboxes = (options = {}) => async (dispatch, getState) => {
-  dispatch(setLoading({ key: 'inboxes', value: true }));
+  const isAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+  if (!isAppend) {
+    dispatch(setLoading({ key: 'inboxes', value: true }));
+  }
   try {
     const state = getState().global;
     const { activeFilter, dateRange, pagination, allInboxes } = state;
+    const page = options.page ?? pagination.page ?? 1;
+    const limit = options.limit ?? pagination.limit ?? 10;
     const params = {
       status: options.status ?? (activeFilter === 'all' ? '' : activeFilter),
-      limit: options.limit ?? pagination.limit,
-      skip: options.skip ?? pagination.skip,
+      page,
+      limit,
+      skip: options.skip ?? ((page - 1) * limit),
       startDate: options.startDate ?? dateRange.start ?? '',
       endDate: options.endDate ?? dateRange.end ?? '',
     };
 
     const wantStatus = params.status;
     const force = !!options.forceFetch;
-    if (wantStatus && !force && Array.isArray(allInboxes) && allInboxes.length > 0) {
+    const shouldUseCache = !force && !options.page && !options.limit && !options.skip && Array.isArray(allInboxes) && allInboxes.length > 0;
+    if (wantStatus && shouldUseCache) {
       const filtered = allInboxes.filter(i => i.status === wantStatus);
       dispatch(setInboxes(filtered));
-      return filtered;
+      return { data: filtered, pagination: { page: 1, limit, totalCount: filtered.length, totalPages: 1, hasMore: false } };
     }
 
-    if (!wantStatus && !force && Array.isArray(allInboxes) && allInboxes.length > 0) {
+    if (!wantStatus && shouldUseCache) {
       dispatch(setInboxes(allInboxes));
-      return allInboxes;
+      return { data: allInboxes, pagination: { page: 1, limit, totalCount: allInboxes.length, totalPages: 1, hasMore: false } };
     }
 
     const data = await apiService.getInboxes(params);
@@ -282,15 +325,23 @@ export const fetchInboxes = (options = {}) => async (dispatch, getState) => {
       inboxList = data.data;
     }
 
+    const paginationMeta = normalizePaginationMeta(data, page, limit, inboxList.length);
+
+    const shouldAppend = Boolean(options.append || page > 1);
+    console.log('[pagination][inboxes]', { page, limit, isAppend: shouldAppend, count: inboxList.length, paginationMeta, status: params.status });
+    const nextInboxes = shouldAppend ? mergeUniqueItems(state.inboxes, inboxList) : inboxList;
+    const nextAllInboxes = shouldAppend && !wantStatus ? mergeUniqueItems(state.allInboxes, inboxList) : (wantStatus ? state.allInboxes : inboxList);
+
     if (!wantStatus) {
-      dispatch(setAllInboxes(inboxList));
+      dispatch(setAllInboxes(nextAllInboxes));
     }
-    dispatch(setInboxes(inboxList));
+    dispatch(setInboxes(nextInboxes));
+    dispatch(setPagination({ ...paginationMeta, skip: (paginationMeta.page - 1) * paginationMeta.limit }));
     try {
       dispatch(showToast({ text: 'Inboxes loaded', type: 'success' }));
       setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
     } catch (e) {}
-    return inboxList;
+    return { data: inboxList, pagination: paginationMeta };
   } catch (error) {
     console.error('Failed to fetch inboxes:', error);
     try {
@@ -299,7 +350,9 @@ export const fetchInboxes = (options = {}) => async (dispatch, getState) => {
     } catch (e) {}
     throw error;
   } finally {
-    dispatch(setLoading({ key: 'inboxes', value: false }));
+    if (!isAppend) {
+      dispatch(setLoading({ key: 'inboxes', value: false }));
+    }
   }
 };
 
@@ -397,11 +450,15 @@ export const loadInboxesProgressively = () => async (dispatch, getState) => {
   }
 };
 
-export const fetchMessages = (inboxId) => async (dispatch) => {
-  dispatch(setLoading({ key: 'messages', value: true }));
+export const fetchMessages = (inboxId, options = {}) => async (dispatch, getState) => {
+  const isAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+  if (!isAppend) {
+    dispatch(setLoading({ key: 'messages', value: true }));
+  }
   try {
-    const data = await apiService.getMessages(inboxId);
-    let messageList = data.messages || data.data || data || [];
+    const state = getState().global;
+    const data = await apiService.getMessages(inboxId, options);
+    let messageList = data?.messages || data?.data || data || [];
     const resolutionList = Array.isArray(data?.resolutions)
       ? data.resolutions
       : Array.isArray(data?.resolution)
@@ -438,22 +495,30 @@ export const fetchMessages = (inboxId) => async (dispatch) => {
       return normalizeMessage(msg);
     });
     
-    dispatch(setMessages(messageList));
+    const paginationMeta = normalizePaginationMeta(data, options.page || 1, options.limit || 10, messageList.length);
+    const shouldAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+    console.log('[pagination][messages]', { inboxId, page: options.page || 1, limit: options.limit || 10, isAppend: shouldAppend, count: messageList.length, paginationMeta });
+    const nextMessages = shouldAppend ? mergeUniqueItems(state.messages, messageList) : messageList;
+    dispatch(setMessages(nextMessages));
     try {
       dispatch(showToast({ text: 'Messages loaded', type: 'success' }));
       setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
     } catch (e) {}
-    return messageList;
+    return {
+      data: messageList,
+      pagination: paginationMeta,
+    };
   } catch (error) {
     console.error('Failed to fetch messages:', error);
-    dispatch(setMessages([]));
     try {
       dispatch(showToast({ text: 'Failed to fetch messages', type: 'error' }));
       setTimeout(() => dispatch(showToast({ text: '', type: '' })), 2000);
     } catch (e) {}
     throw error;
   } finally {
-    dispatch(setLoading({ key: 'messages', value: false }));
+    if (!isAppend) {
+      dispatch(setLoading({ key: 'messages', value: false }));
+    }
   }
 };
 
@@ -510,71 +575,112 @@ export const updateInboxStatus = (inboxId, status, queryType = '', resolvedBy = 
   }
 };
 
-export const fetchUserSubscriptions = (userId) => async (dispatch) => {
+export const fetchUserSubscriptions = (userId, options = {}) => async (dispatch, getState) => {
   try {
-    const response = await apiService.getSubscriptions(userId);
-    const subs = response.subscriptions || response.data || response || [];
-    dispatch(setSubscriptions(subs));
-    return { data: subs };
+    const state = getState().global;
+    const response = await apiService.getSubscriptions(userId, options);
+    const subs = response?.subscriptions || response?.data || response || [];
+    const shouldAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+    const nextSubs = shouldAppend ? mergeUniqueItems(state.subscriptions, subs) : subs;
+    dispatch(setSubscriptions(nextSubs));
+    const pagination = normalizePaginationMeta(response, options.page || 1, options.limit || 10, subs.length);
+    console.log('[pagination][subscriptions]', { userId, page: options.page || 1, limit: options.limit || 10, isAppend: shouldAppend, count: subs.length, pagination });
+    return {
+      data: subs,
+      pagination,
+    };
   } catch (error) {
     console.error('Failed to fetch subscriptions:', error);
     return { data: [] };
   }
 };
 
-export const fetchUserPayments = (userId) => async (dispatch) => {
+export const fetchUserPayments = (userId, options = {}) => async (dispatch, getState) => {
   try {
-    const response = await apiService.getPayments(userId);
-    const payments = response.payments || response.data || response || [];
-    dispatch(setPayments(payments));
-    return { data: payments };
+    const state = getState().global;
+    const response = await apiService.getPayments(userId, options);
+    const payments = response?.payments || response?.data || response || [];
+    const shouldAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+    const nextPayments = shouldAppend ? mergeUniqueItems(state.payments, payments) : payments;
+    dispatch(setPayments(nextPayments));
+    const pagination = normalizePaginationMeta(response, options.page || 1, options.limit || 10, payments.length);
+    console.log('[pagination][payments]', { userId, page: options.page || 1, limit: options.limit || 10, isAppend: shouldAppend, count: payments.length, pagination });
+    return {
+      data: payments,
+      pagination,
+    };
   } catch (error) {
     console.error('Failed to fetch payments:', error);
     return { data: [] };
   }
 };
 
-export const fetchUserViews = (userId) => async (dispatch) => {
+export const fetchUserViews = (userId, options = {}) => async (dispatch, getState) => {
   try {
-    const response = await apiService.getViews(userId);
-    const viewsData = response.videoTracks || response.views || response.data || response || [];
+    const state = getState().global;
+    const response = await apiService.getViews(userId, options);
+    const viewsData = response?.videoTracks || response?.views || response?.data || response || [];
     const views = Array.isArray(viewsData) ? viewsData : [];
-    dispatch(setViews(views));
-    return { data: views };
+    const shouldAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+    const nextViews = shouldAppend ? mergeUniqueItems(state.views, views) : views;
+    dispatch(setViews(nextViews));
+    const pagination = normalizePaginationMeta(response, options.page || 1, options.limit || 10, views.length);
+    console.log('[pagination][views]', { userId, page: options.page || 1, limit: options.limit || 10, isAppend: shouldAppend, count: views.length, pagination });
+    return {
+      data: views,
+      pagination,
+    };
   } catch (error) {
     console.error('Failed to fetch views:', error);
     return { data: [] };
   }
 };
 
-export const fetchUserActivities = (inboxId) => async (dispatch) => {
+export const fetchUserActivities = (inboxId, options = {}) => async (dispatch, getState) => {
   try {
-    const response = await apiService.getActivities(inboxId);
-    let notesData = response.activities || response.data || response || [];
+    const state = getState().global;
+    const response = await apiService.getActivities(inboxId, options);
+    let notesData = response?.activities || response?.data || response || [];
     const notes = Array.isArray(notesData) ? notesData : [];
-    dispatch(setNotes(notes));
-    return { data: notes };
+    const shouldAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+    const nextNotes = shouldAppend ? mergeUniqueItems(state.notes, notes) : notes;
+    dispatch(setNotes(nextNotes));
+    const pagination = normalizePaginationMeta(response, options.page || 1, options.limit || 10, notes.length);
+    console.log('[pagination][notes]', { inboxId, page: options.page || 1, limit: options.limit || 10, isAppend: shouldAppend, count: notes.length, pagination });
+    return {
+      data: notes,
+      pagination,
+    };
   } catch (error) {
     console.error('Failed to fetch activities:', error);
     return { data: [] };
   }
 };
 
-export const fetchResolutions = (inboxId) => async (dispatch, getState) => {
+export const fetchResolutions = (inboxId, options = {}) => async (dispatch, getState) => {
   if (!inboxId) return [];
   const state = getState().global;
-  if (state.resolutionsByInbox[inboxId] && Array.isArray(state.resolutionsByInbox[inboxId]) && state.resolutionsByInbox[inboxId].length > 0) {
+  if (!options.page && !options.limit && state.resolutionsByInbox[inboxId] && Array.isArray(state.resolutionsByInbox[inboxId]) && state.resolutionsByInbox[inboxId].length > 0) {
     return state.resolutionsByInbox[inboxId];
   }
   try {
-    const response = await apiService.fetchResolutions(inboxId);
-    const list = Array.isArray(response.resolutions) ? response.resolutions : (Array.isArray(response) ? response : []);
-    dispatch(setResolutionsForInbox({ inboxId, resolutions: list }));
-    return list;
+    const state = getState().global;
+    const response = await apiService.fetchResolutions(inboxId, options);
+    const list = Array.isArray(response?.resolutions) ? response.resolutions : (Array.isArray(response) ? response : []);
+    const existing = Array.isArray(state.resolutionsByInbox[inboxId]) ? state.resolutionsByInbox[inboxId] : [];
+    const shouldAppend = Boolean(options.append || (options.page && Number(options.page) > 1));
+    const nextResolutions = shouldAppend ? mergeUniqueItems(existing, list) : list;
+    dispatch(setResolutionsForInbox({ inboxId, resolutions: nextResolutions }));
+    const pagination = normalizePaginationMeta(response, options.page || 1, options.limit || 10, list.length);
+    console.log('[pagination][resolutions]', { inboxId, page: options.page || 1, limit: options.limit || 10, isAppend: shouldAppend, count: list.length, pagination });
+    return {
+      data: list,
+      pagination,
+    };
   } catch (error) {
     console.error('Failed to fetch resolutions:', error);
     dispatch(setResolutionsForInbox({ inboxId, resolutions: [] }));
-    return [];
+    return { data: [], pagination: { page: 1, limit: options.limit || 10, totalCount: 0, totalPages: 1, hasMore: false } };
   }
 };
 
@@ -1036,13 +1142,13 @@ export const useGlobalStore = (selector) => {
     fetchDashboard: (opts) => dispatch(fetchDashboard(opts)),
     fetchInboxes: (opts) => dispatch(fetchInboxes(opts)),
     loadInboxesProgressively: () => dispatch(loadInboxesProgressively()),
-    fetchMessages: (id) => dispatch(fetchMessages(id)),
+    fetchMessages: (id, opts = {}) => dispatch(fetchMessages(id, opts)),
     updateInboxStatus: (id, status, qt, rb) => dispatch(updateInboxStatus(id, status, qt, rb)),
-    fetchUserSubscriptions: (u) => dispatch(fetchUserSubscriptions(u)),
-    fetchUserPayments: (u) => dispatch(fetchUserPayments(u)),
-    fetchUserViews: (u) => dispatch(fetchUserViews(u)),
-    fetchUserActivities: (i) => dispatch(fetchUserActivities(i)),
-    fetchResolutions: (i) => dispatch(fetchResolutions(i)),
+    fetchUserSubscriptions: (u, opts = {}) => dispatch(fetchUserSubscriptions(u, opts)),
+    fetchUserPayments: (u, opts = {}) => dispatch(fetchUserPayments(u, opts)),
+    fetchUserViews: (u, opts = {}) => dispatch(fetchUserViews(u, opts)),
+    fetchUserActivities: (i, opts = {}) => dispatch(fetchUserActivities(i, opts)),
+    fetchResolutions: (i, opts = {}) => dispatch(fetchResolutions(i, opts)),
     sendWhatsappTemplate: (m, t) => dispatch(sendWhatsappTemplate(m, t)),
     sendWhatsappMessage: (m, b) => dispatch(sendWhatsappMessage(m, b)),
     sendEmailReply: (r, h, e, cc = '', bcc = '') => dispatch(sendEmailReply(r, h, e, cc, bcc)),

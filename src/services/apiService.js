@@ -1,6 +1,17 @@
-const BASE_URL = 'https://cms-api.onference.in/support';
+const BASE_URL = 'https://sadmin-api.onference.in/support';
 
 class ApiService {
+  buildQueryString(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        query.append(key, String(value));
+      }
+    });
+    const queryString = query.toString();
+    return queryString ? `?${queryString}` : '';
+  }
+
   async request(endpoint, options = {}) {
     const url = `${BASE_URL}${endpoint}`;
     const config = {
@@ -58,9 +69,16 @@ class ApiService {
   }
 
   // Inboxes - GET /inboxes/:status (pass empty string or omit for all)
-  async getInboxes({ status = '', limit = 20, skip = 0, startDate = '', endDate = '' } = {}) {
+  async getInboxes({ status = '', page = 1, limit = 10, skip = 0, startDate = '', endDate = '' } = {}) {
     const endpoint = status ? `/inboxes/${status}` : '/inboxes';
-    return this.request(endpoint, {
+    const queryParams = {
+      page,
+      limit,
+      ...(skip > 0 ? { skip } : {}),
+      ...(startDate ? { startDate } : {}),
+      ...(endDate ? { endDate } : {}),
+    };
+    return this.request(`${endpoint}${this.buildQueryString(queryParams)}`, {
       method: 'GET',
     });
   }
@@ -79,8 +97,8 @@ class ApiService {
   }
 
   // Messages - GET /messages/:inboxId
-  async getMessages(inboxId) {
-    return this.request(`/messages/${inboxId}`);
+  async getMessages(inboxId, { page = 1, limit = 10 } = {}) {
+    return this.request(`/messages/${inboxId}${this.buildQueryString({ page, limit })}`);
   }
 
   // WhatsApp - POST /whatsapp/template
@@ -144,29 +162,29 @@ class ApiService {
   }
 
   // Subscriptions - GET /subscriptions/:userId
-  async getSubscriptions(userId, limit = 10) {
-    return this.request(`/subscriptions/${userId}`, {
+  async getSubscriptions(userId, { page = 1, limit = 10 } = {}) {
+    return this.request(`/subscriptions/${userId}${this.buildQueryString({ page, limit })}`, {
       method: 'GET',
     });
   }
 
   // Payments - GET /payments/:userId
-  async getPayments(userId, limit = 10) {
-    return this.request(`/payments/${userId}`, {
+  async getPayments(userId, { page = 1, limit = 10 } = {}) {
+    return this.request(`/payments/${userId}${this.buildQueryString({ page, limit })}`, {
       method: 'GET',
     });
   }
 
   // Views - GET /views/:userId
-  async getViews(userId, limit = 10) {
-    return this.request(`/views/${userId}`, {
+  async getViews(userId, { page = 1, limit = 10 } = {}) {
+    return this.request(`/views/${userId}${this.buildQueryString({ page, limit })}`, {
       method: 'GET',
     });
   }
 
   // Activities - GET /activities/:inboxId
-  async getActivities(inboxId, limit = 10) {
-    return this.request(`/activities/${inboxId}`, {
+  async getActivities(inboxId, { page = 1, limit = 10 } = {}) {
+    return this.request(`/activities/${inboxId}${this.buildQueryString({ page, limit })}`, {
       method: 'GET',
     });
   }
@@ -201,8 +219,8 @@ class ApiService {
   }
 
   // Resolutions - GET /resolutions/:inboxId
-  async fetchResolutions(inboxId) {
-    return this.request(`/resolutions/${inboxId}`);
+  async fetchResolutions(inboxId, { page = 1, limit = 10 } = {}) {
+    return this.request(`/resolutions/${inboxId}${this.buildQueryString({ page, limit })}`);
   }
 
   // Send WhatsApp Template - POST /whatsapp/template
